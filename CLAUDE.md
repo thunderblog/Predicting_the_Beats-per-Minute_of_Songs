@@ -119,6 +119,29 @@ Each main module can be run directly or via Make:
 - 処理完了時: `logger.success()`
 - エラー時: `logger.error()`
 
+## Git ブランチ命名規則
+
+### 基本パターン
+- `feature/ticket-XXX/機能名` - 新機能開発用ブランチ
+- `bugfix/ticket-XXX/修正内容` - バグ修正用ブランチ
+- `hotfix/緊急修正内容` - 緊急修正用ブランチ
+
+### 命名例
+```
+feature/ticket-001/dataset-processing
+feature/ticket-001/data-validation
+feature/ticket-002/lightgbm-implementation
+feature/ticket-002/cross-validation
+feature/ticket-003/model-loading
+feature/ticket-003/prediction-pipeline
+```
+
+### 利点
+- **階層的管理**: チケット単位での機能管理が可能
+- **拡張性**: 同一チケット内で複数ブランチに分割可能
+- **追跡性**: チケット番号から要件が明確に追跡可能
+- **一貫性**: 全チケットで統一された命名規則
+
 ## プロジェクト情報
 
 ### Kaggleコンペティション: "Predicting the Beats-per-Minute of Songs"
