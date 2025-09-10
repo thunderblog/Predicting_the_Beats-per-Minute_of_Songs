@@ -1,7 +1,7 @@
 # Configクラスを定義
 class CFG:
-    exp_name = 'exp004'
-    log_dir = "./tensorboard_logs/" + exp_name
+    exp_name = 'exp01'
+    log_dir = "./log/" + exp_name
     test_size = 0.2
     random_state = 42
     learning_rate = 0.1
