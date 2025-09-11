@@ -14,8 +14,7 @@ from sklearn.model_selection import train_test_split
 # プロジェクトルートをパスに追加
 sys.path.append(str(Path(__file__).parent.parent))
 
-from bpm.config import PROCESSED_DATA_DIR, RAW_DATA_DIR
-from script.my_config import config
+from scripts.my_config import config
 
 
 def load_raw_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -26,11 +25,9 @@ def load_raw_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     logger.info("生データを読み込み中...")
     
-    # TODO(human): ファイルパスの設定
-    # RAW_DATA_DIRを使用して、以下の3つのファイルパスを作成してください:
-    # - train.csv
-    # - test.csv  
-    # - sample_submission.csv
+    train_path = config.get_raw_path('train')
+    test_path = config.get_raw_path('test')
+    sample_path = config.get_raw_path('sample_submission')
     
     train_df = pd.read_csv(train_path)
     test_df = pd.read_csv(test_path)
@@ -51,10 +48,9 @@ def validate_data(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
         test_df: テストデータセット
     """
     logger.info("データ品質をチェック中...")
-    
-    # TODO(human): 欠損値チェックの実装
-    # train_dfとtest_dfの欠損値の総数を計算してください
-    # ヒント: .isnull().sum().sum() を使用
+        
+    train_missing = train_df.isnull().sum().sum()
+    test_missing = test_df.isnull().sum().sum()
     
     if train_missing > 0:
         logger.warning(f"訓練データに {train_missing} 個の欠損値があります")
@@ -76,9 +72,11 @@ def validate_data(train_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
         logger.error(f"  テストデータのみ: {test_features - train_features}")
         raise ValueError("訓練データとテストデータの特徴量が一致しません")
     
-    # TODO(human): 設定ファイルとの整合性チェック
-    # config.featuresと実際のデータの特徴量を比較してください
-    # データの特徴量はtrain_featuresとして既に計算済みです
+    if train_features != set(config.features):
+        logger.error(f"特徴量の不整合:")
+        logger.error(f"  設定ファイルにない特徴量: {set(config.features) - train_features}")
+        logger.error(f"  データにない特徴量: {set(train_features) - set(config.features)}")
+        raise ValueError("Configと実際のデータの特徴量が一致しません")
     
     logger.success("データ品質チェック完了")
 
@@ -93,14 +91,24 @@ def analyze_target_distribution(train_df: pd.DataFrame) -> None:
     
     target_col = config.target
     
-    # TODO(human): 基本統計の計算
-    # train_df[target_col]の基本統計量を計算して表示してください
-    # ヒント: .describe() を使用
+    # 基本統計の計算
+    stats = train_df[target_col].describe()
+    logger.info(f"ターゲット変数{target_col}の基本統計量: {stats.to_string()}")
     
-    # TODO(human): 外れ値の検出
-    # IQR法を使用して外れ値を検出してください
-    # Q1, Q3を計算し、IQR = Q3 - Q1として外れ値の閾値を設定
+    # 外れ値の検出    
+    # IQRの計算
+    Q1 = train_df[target_col].quantile(0.25)
+    Q3 = train_df[target_col].quantile(0.75)
+    IQR = Q3 - Q1
     
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    outliers_count = ((train_df[target_col] < lower_bound) |
+                      (train_df[target_col] > upper_bound)).sum()
+    
+    logger.info(f"四分位数: Q1={Q1:.2f}, Q3={Q3:.2f}, IQR={IQR:.2f}")
+    logger.info(f"外れ値判定閾値: 下限={lower_bound:.2f}, 上限={upper_bound:.2f}")
     logger.info(f"外れ値の可能性のあるデータ: {outliers_count}件")
     
     logger.success("ターゲット分析完了")
@@ -126,6 +134,13 @@ def split_train_validation(
     # - random_state: config.random_state
     # - stratify: None (回帰タスクのため)
     
+    train_split, val_split = train_test_split(
+        train_df,
+        test_size=config.test_size,
+        random_state=config.random_state,
+        stratify=None
+    )
+        
     logger.info(f"訓練セット: {train_split.shape}")
     logger.info(f"検証セット: {val_split.shape}")
     
@@ -172,7 +187,7 @@ def save_processed_data(
     logger.info("処理済みデータを保存中...")
     
     # 保存先ディレクトリを確認・作成
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    config.processed_data_dir.mkdir(parents=True, exist_ok=True)
     
     # TODO(human): 保存パスの定義
     # PROCESSED_DATA_DIRを使用して以下のファイルパスを作成してください:
