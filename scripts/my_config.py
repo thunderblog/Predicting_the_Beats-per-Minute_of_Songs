@@ -9,7 +9,11 @@ load_dotenv()
 # https://github.com/Delgan/loguru/issues/135
 try:
     from tqdm import tqdm
-    logger.remove(0)
+    # loguruのデフォルトハンドラーが存在する場合のみ削除
+    try:
+        logger.remove(0)
+    except ValueError:
+        pass  # ハンドラーが存在しない場合は無視
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True)
 except ModuleNotFoundError:
     pass

@@ -3,6 +3,7 @@ TICKET-001: データセット処理機能の実装
 KaggleのBPM予測コンペティション用データセット処理スクリプト
 """
 
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -10,6 +11,9 @@ import pandas as pd
 import typer
 from loguru import logger
 from sklearn.model_selection import train_test_split
+
+# プロジェクトルートをパスに追加
+sys.path.append(str(Path(__file__).parent.parent))
 
 from scripts.my_config import config
 
