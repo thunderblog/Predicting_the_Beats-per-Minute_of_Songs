@@ -64,7 +64,8 @@ class CFG:
         "train": "train.csv",
         "validation": "validation.csv", 
         "test": "test.csv",
-        "sample_submission": "sample_submission.csv"
+        "sample_submission": "sample_submission.csv",
+        "feature_summary" : "feature_summary.csv"
     }
     
     # パス取得メソッド（遅延評価でインポート循環を回避）

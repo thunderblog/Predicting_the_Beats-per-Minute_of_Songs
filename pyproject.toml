@@ -20,13 +20,13 @@ requires-python = "~=3.10.0"
 
 [tool.ruff]
 line-length = 99
-src = ["bpm"]
-include = ["pyproject.toml", "bpm/**/*.py"]
+src = ["src"]
+include = ["pyproject.toml", "src/**/*.py"]
 
 [tool.ruff.lint]
 extend-select = ["I"]  # Add import sorting
 
 [tool.ruff.lint.isort]
-known-first-party = ["bpm"]
+known-first-party = ["src"]
 force-sort-within-sections = true
 

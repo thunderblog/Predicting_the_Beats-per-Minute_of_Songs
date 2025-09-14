@@ -15,7 +15,7 @@ This project uses Make for common tasks:
 - `make format` - Format code with ruff (auto-fix and format)
 - `make lint` - Check code formatting and linting with ruff
 - `make test` - Run tests with pytest
-- `make data` - Process dataset using bpm/dataset.py
+- `make data` - Process dataset using src/dataset.py
 - `make clean` - Remove compiled Python files and __pycache__ directories
 - `make help` - Show all available Make targets
 
@@ -29,7 +29,7 @@ Alternative direct commands:
 
 This is a Cookiecutter Data Science project following standard ML/data science structure:
 
-### Core Module Structure (`bpm/`)
+### Core Module Structure (`src/`)
 - `config.py` - Central configuration with project paths (DATA_DIR, MODELS_DIR, etc.) and logging setup
 - `dataset.py` - Data processing pipeline (CLI with typer)
 - `features.py` - Feature engineering utilities
@@ -56,15 +56,15 @@ This is a Cookiecutter Data Science project following standard ML/data science s
 ### Configuration Notes
 - Line length: 99 characters (pyproject.toml)
 - Python version: ~3.10.0
-- Ruff includes import sorting (isort) with bpm as known first-party
+- Ruff includes import sorting (isort) with src as known first-party
 - Environment variables loaded via python-dotenv in config.py
 - All main modules (dataset.py, train.py, predict.py) are CLI applications using typer
 
 ### Running Main Modules
 Each main module can be run directly or via Make:
-- `python bpm/dataset.py` or `make data`
-- `python bpm/modeling/train.py` 
-- `python bpm/modeling/predict.py`
+- `python src/dataset.py` or `make data`
+- `python src/modeling/train.py`
+- `python src/modeling/predict.py`
 
 ## コーディング規則とベストプラクティス
 
@@ -168,20 +168,39 @@ feature/ticket-003/prediction-pipeline
 - **使用予定モデル**: LightGBM、その他の機械学習モデルも検討
 - **実験管理**: script/my_config.pyのCFGクラスで設定を管理
 
-## 開発タスクチケット
+## 開発タスクチケット（データ分析の適切な順序）
 
-### 優先度: 高
-1. **[TICKET-001] データセット処理機能の実装**
-   - ファイル: `bmp/dataset.py`
-   - 現状: プレースホルダーコード
-   - 要件: 
+### 第1段階: データ理解とEDA
+1. **[TICKET-001] データセット処理機能の実装** ✅ **完了**
+   - ファイル: `src/dataset.py`
+   - 現状: 実装完了
+   - 要件:
      - CSVデータの読み込み・前処理
      - 訓練・テストデータの分割
      - データ品質チェック
      - 前処理済みデータの保存
 
-2. **[TICKET-002] LightGBM回帰モデルの訓練機能**
-   - ファイル: `bpm/modeling/train.py`
+2. **[TICKET-005] データ可視化機能** 🔄 **実装中**
+   - ファイル: `src/plots.py`
+   - 現状: プレースホルダーコード
+   - 要件:
+     - EDAプロット（ターゲット分布、特徴量分布）
+     - 特徴量間相関分析
+     - 外れ値可視化
+     - 予測結果可視化
+
+### 第2段階: 特徴量改善
+3. **[TICKET-004] 特徴量エンジニアリング機能**
+   - ファイル: `src/features.py`
+   - 現状: 空ファイル
+   - 要件:
+     - EDA結果を基にした新特徴量作成
+     - 特徴量選択機能
+     - スケーリング機能
+
+### 第3段階: モデル開発
+4. **[TICKET-002] LightGBM回帰モデルの訓練機能**
+   - ファイル: `src/modeling/train.py`
    - 現状: プレースホルダーコード
    - 要件:
      - LightGBMRegressor実装
@@ -190,31 +209,15 @@ feature/ticket-003/prediction-pipeline
      - モデル保存機能
      - RMSEメトリクス
 
-3. **[TICKET-003] モデル推論機能の実装**
-   - ファイル: `bpm/modeling/predict.py`
+5. **[TICKET-003] モデル推論機能の実装**
+   - ファイル: `src/modeling/predict.py`
    - 現状: プレースホルダーコード
    - 要件:
      - 訓練済みモデルの読み込み
      - テストデータでの予測
      - Kaggle提出形式での出力
 
-### 優先度: 中
-4. **[TICKET-004] 特徴量エンジニアリング機能**
-   - ファイル: `bpm/features.py`
-   - 現状: 空ファイル
-   - 要件:
-     - 特徴量作成関数
-     - 特徴量選択機能
-     - スケーリング機能
-
-5. **[TICKET-005] データ可視化機能**
-   - ファイル: `bpm/plots.py`
-   - 現状: 空ファイル
-   - 要件:
-     - EDAプロット
-     - 特徴量分布可視化
-     - 予測結果可視化
-
+### 第4段階: 品質保証
 6. **[TICKET-006] テストケースの拡充**
    - ディレクトリ: `tests/`
    - 現状: 基本テストのみ
@@ -223,7 +226,7 @@ feature/ticket-003/prediction-pipeline
      - データパイプラインテスト
      - モデル性能テスト
 
-### 優先度: 低
+### 第5段階: 運用準備
 7. **[TICKET-007] Kaggleサブミッション用スクリプト**
    - 新規ファイル: `scripts/submit.py`
    - 要件:
