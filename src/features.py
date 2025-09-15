@@ -33,8 +33,8 @@ def create_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 音声特徴量の組み合わせ
     df_features["loudness_vocal_product"] = df["AudioLoudness"] * df["VocalContent"]
-    df_features["acoustic_instrumental_ratio"] = (
-        df["AcousticQuality"] / (df["InstrumentalScore"] + 1e-8)
+    df_features["acoustic_instrumental_ratio"] = df["AcousticQuality"] / (
+        df["InstrumentalScore"] + 1e-8
     )
 
     # パフォーマンスとムード特徴量
@@ -66,16 +66,13 @@ def create_duration_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 時間カテゴリ
     df_features["is_short_track"] = (df["TrackDurationMs"] < 180000).astype(int)  # 3分未満
-    df_features["is_long_track"] = (df["TrackDurationMs"] > 300000).astype(int)   # 5分超
+    df_features["is_long_track"] = (df["TrackDurationMs"] > 300000).astype(int)  # 5分超
 
     # 時間区分
-    duration_bins = [0, 120000, 180000, 240000, 300000, float('inf')]
-    duration_labels = ['very_short', 'short', 'medium', 'long', 'very_long']
+    duration_bins = [0, 120000, 180000, 240000, 300000, float("inf")]
+    duration_labels = ["very_short", "short", "medium", "long", "very_long"]
     df_features["duration_category"] = pd.cut(
-        df["TrackDurationMs"],
-        bins=duration_bins,
-        labels=duration_labels,
-        include_lowest=True
+        df["TrackDurationMs"], bins=duration_bins, labels=duration_labels, include_lowest=True
     ).astype(str)
 
     # 時間カテゴリのワンホットエンコーディング
@@ -101,8 +98,14 @@ def create_statistical_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 数値特徴量を選択（idとターゲットを除く）
     numerical_cols = [
-        "RhythmScore", "AudioLoudness", "VocalContent", "AcousticQuality",
-        "InstrumentalScore", "LivePerformanceLikelihood", "MoodScore", "Energy"
+        "RhythmScore",
+        "AudioLoudness",
+        "VocalContent",
+        "AcousticQuality",
+        "InstrumentalScore",
+        "LivePerformanceLikelihood",
+        "MoodScore",
+        "Energy",
     ]
 
     # 全スコアの合計
@@ -128,7 +131,7 @@ def select_features(
     y_train: pd.Series,
     X_val: pd.DataFrame = None,
     method: str = "kbest",
-    k: int = 20
+    k: int = 20,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """様々な選択手法を使用して最も重要な特徴量を選択する。
 
@@ -144,24 +147,94 @@ def select_features(
     """
     logger.info(f"{method}法で特徴量選択中 (k={k})...")
 
-    # 実装してください - 異なる特徴量選択戦略から選択:
-    # 1. SelectKBest with f_regression（F統計量による選択）
-    # 2. SelectKBest with mutual_info_regression（相互情報量による選択）
-    # 3. Correlation-based selection（相関係数による選択）
-    # 4. A combination approach（組み合わせアプローチ）
+    if method == "kbest":
+        # F統計量による特徴量選択
+        selector = SelectKBest(score_func=f_regression, k=k)
+        X_train_selected = selector.fit_transform(X_train, y_train)
 
-    # 今のところは元の特徴量を返す
-    if X_val is not None:
-        return X_train, X_val
+        # 選択された特徴量のインデックスを取得
+        selected_indices = selector.get_support(indices=True)
+        selected_features = X_train.columns[selected_indices]
+
+        # DataFrameとして再構築
+        X_train_result = pd.DataFrame(
+            X_train_selected, columns=selected_features, index=X_train.index
+        )
+
+        # 検証データがある場合は同じ特徴量で変換
+        if X_val is not None:
+            X_val_result = pd.DataFrame(
+                selector.transform(X_val), columns=selected_features, index=X_val.index
+            )
+        else:
+            X_val_result = None
+
+    elif method == "mutual_info":
+        # 相互情報量による特徴量選択
+        selector = SelectKBest(score_func=mutual_info_regression, k=k)
+        X_train_selected = selector.fit_transform(X_train, y_train)
+
+        selected_indices = selector.get_support(indices=True)
+        selected_features = X_train.columns[selected_indices]
+
+        X_train_result = pd.DataFrame(
+            X_train_selected, columns=selected_features, index=X_train.index
+        )
+
+        if X_val is not None:
+            X_val_result = pd.DataFrame(
+                selector.transform(X_val), columns=selected_features, index=X_val.index
+            )
+        else:
+            X_val_result = None
+
+    elif method == "correlation":
+        # 相関係数による特徴量選択
+        correlations = X_train.corrwith(y_train).abs()
+        selected_features = correlations.nlargest(k).index.tolist()
+
+        X_train_result = X_train[selected_features]
+        X_val_result = X_val[selected_features] if X_val is not None else None
+
+    elif method == "combined":
+        # 組み合わせアプローチ：F統計量と相互情報量の平均スコア
+        # F統計量による選択
+        selector_f = SelectKBest(score_func=f_regression, k=len(X_train.columns))
+        selector_f.fit(X_train, y_train)
+        f_scores = selector_f.scores_
+
+        # 相互情報量による選択
+        selector_mi = SelectKBest(score_func=mutual_info_regression, k=len(X_train.columns))
+        selector_mi.fit(X_train, y_train)
+        mi_scores = selector_mi.scores_
+
+        # スコアを正規化して平均を取る
+        f_scores_normalized = (f_scores - f_scores.min()) / (f_scores.max() - f_scores.min())
+        mi_scores_normalized = (mi_scores - mi_scores.min()) / (mi_scores.max() - mi_scores.min())
+        combined_scores = (f_scores_normalized + mi_scores_normalized) / 2
+
+        # 上位k個の特徴量を選択
+        selected_indices = np.argsort(combined_scores)[-k:]
+        selected_features = X_train.columns[selected_indices]
+
+        X_train_result = X_train[selected_features]
+        X_val_result = X_val[selected_features] if X_val is not None else None
+
     else:
-        return X_train, None
+        # 不明な手法の場合は元の特徴量を返す
+        logger.warning(f"不明な特徴量選択手法: {method}。元の特徴量を使用します。")
+        X_train_result = X_train
+        X_val_result = X_val
+
+    logger.success(f"{len(X_train_result.columns)}個の特徴量を選択しました")
+    return X_train_result, X_val_result
 
 
 def scale_features(
     X_train: pd.DataFrame,
     X_val: pd.DataFrame = None,
     X_test: pd.DataFrame = None,
-    scaler_type: str = "standard"
+    scaler_type: str = "standard",
 ) -> tuple:
     """指定されたスケーリング手法で特徴量をスケールする。
 
@@ -177,19 +250,13 @@ def scale_features(
     logger.info(f"{scaler_type}スケーリングを適用中...")
 
     # スケーラを選択
-    scalers = {
-        "standard": StandardScaler(),
-        "robust": RobustScaler(),
-        "minmax": MinMaxScaler()
-    }
+    scalers = {"standard": StandardScaler(), "robust": RobustScaler(), "minmax": MinMaxScaler()}
 
     scaler = scalers.get(scaler_type, StandardScaler())
 
     # 訓練データでフィット
     X_train_scaled = pd.DataFrame(
-        scaler.fit_transform(X_train),
-        columns=X_train.columns,
-        index=X_train.index
+        scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index
     )
 
     results = [X_train_scaled]
@@ -197,9 +264,7 @@ def scale_features(
     # 検証データが提供されている場合は変換
     if X_val is not None:
         X_val_scaled = pd.DataFrame(
-            scaler.transform(X_val),
-            columns=X_val.columns,
-            index=X_val.index
+            scaler.transform(X_val), columns=X_val.columns, index=X_val.index
         )
         results.append(X_val_scaled)
     else:
@@ -208,9 +273,7 @@ def scale_features(
     # テストデータが提供されている場合は変換
     if X_test is not None:
         X_test_scaled = pd.DataFrame(
-            scaler.transform(X_test),
-            columns=X_test.columns,
-            index=X_test.index
+            scaler.transform(X_test), columns=X_test.columns, index=X_test.index
         )
         results.append(X_test_scaled)
     else:
@@ -289,20 +352,32 @@ def main(
         logger.info(f"{name}データセット: {enhanced_df.shape[1]}特徴量を生成")
 
     # 特徴量行列の準備
-    feature_cols = [col for col in enhanced_datasets["train"].columns
-                   if col not in ["id", "BeatsPerMinute"]]
+    feature_cols = [
+        col for col in enhanced_datasets["train"].columns if col not in ["id", "BeatsPerMinute"]
+    ]
 
     X_train = enhanced_datasets["train"][feature_cols]
-    y_train = enhanced_datasets["train"]["BeatsPerMinute"] if "BeatsPerMinute" in enhanced_datasets["train"].columns else None
+    y_train = (
+        enhanced_datasets["train"]["BeatsPerMinute"]
+        if "BeatsPerMinute" in enhanced_datasets["train"].columns
+        else None
+    )
 
-    X_val = enhanced_datasets.get("validation", {}).get(feature_cols) if "validation" in enhanced_datasets else None
-    X_test = enhanced_datasets.get("test", {}).get(feature_cols) if "test" in enhanced_datasets else None
+    X_val = (
+        enhanced_datasets.get("validation", {}).get(feature_cols)
+        if "validation" in enhanced_datasets
+        else None
+    )
+    X_test = (
+        enhanced_datasets.get("test", {}).get(feature_cols)
+        if "test" in enhanced_datasets
+        else None
+    )
 
     # 特徴量選択
     if select_features_flag and y_train is not None:
         X_train, X_val = select_features(
-            X_train, y_train, X_val,
-            method=feature_selection_method, k=n_features
+            X_train, y_train, X_val, method=feature_selection_method, k=n_features
         )
         if X_test is not None:
             # テストセットに同じ特徴量選択を適用
@@ -341,10 +416,9 @@ def main(
         test_enhanced.to_csv(output_dir / "test_features.csv", index=False)
 
     # 特徴量情報の保存
-    feature_info = pd.DataFrame({
-        "feature_name": X_train.columns,
-        "feature_type": ["engineered"] * len(X_train.columns)
-    })
+    feature_info = pd.DataFrame(
+        {"feature_name": X_train.columns, "feature_type": ["engineered"] * len(X_train.columns)}
+    )
     feature_info.to_csv(output_dir / "feature_info.csv", index=False)
 
     logger.success(f"特徴量エンジニアリング完了: {len(X_train.columns)}特徴量を生成")

@@ -22,16 +22,13 @@ app = typer.Typer()
 
 class RawDataset(NamedTuple):
     """生データセットを格納するデータクラス."""
+
     train: pd.DataFrame
     test: pd.DataFrame
     sample_submission: pd.DataFrame
 
 
-def load_raw_data(
-    train_path: Path,
-    test_path: Path,
-    sample_submission_path: Path
-) -> RawDataset:
+def load_raw_data(train_path: Path, test_path: Path, sample_submission_path: Path) -> RawDataset:
     """生データを読み込む（参照透過性を保つため、パスを引数で受け取る).
 
     Args:
@@ -52,11 +49,7 @@ def load_raw_data(
         test_df = pd.read_csv(test_path)
         sample_submission_df = pd.read_csv(sample_submission_path)
 
-        return RawDataset(
-            train=train_df,
-            test=test_df,
-            sample_submission=sample_submission_df
-        )
+        return RawDataset(train=train_df, test=test_df, sample_submission=sample_submission_df)
     except FileNotFoundError as e:
         raise FileNotFoundError(f"データファイルが見つかりません: {e.filename}") from e
     except pd.errors.EmptyDataError as e:
@@ -99,8 +92,8 @@ def validate_data(dataset: RawDataset) -> None:
         logger.info("テストデータに欠損値はありません")
 
     # 特徴量の整合性チェック
-    train_features = set(dataset.train.columns) - {'id', config.target}
-    test_features = set(dataset.test.columns) - {'id'}
+    train_features = set(dataset.train.columns) - {"id", config.target}
+    test_features = set(dataset.test.columns) - {"id"}
 
     if train_features != test_features:
         logger.error(f"特徴量の不整合:")
@@ -140,8 +133,9 @@ def analyze_target_distribution(train_df: pd.DataFrame) -> None:
     lower_bound = Q1 - 1.5 * IQR
     upper_bound = Q3 + 1.5 * IQR
 
-    outliers_count = ((train_df[target_col] < lower_bound) |
-                      (train_df[target_col] > upper_bound)).sum()
+    outliers_count = (
+        (train_df[target_col] < lower_bound) | (train_df[target_col] > upper_bound)
+    ).sum()
 
     logger.info(f"四分位数: Q1={Q1:.2f}, Q3={Q3:.2f}, IQR={IQR:.2f}")
     logger.info(f"外れ値判定閾値: 下限={lower_bound:.2f}, 上限={upper_bound:.2f}")
@@ -150,9 +144,7 @@ def analyze_target_distribution(train_df: pd.DataFrame) -> None:
     logger.success("ターゲット分析完了")
 
 
-def split_train_validation(
-    train_df: pd.DataFrame
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def split_train_validation(train_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """訓練データを訓練セットと検証セットに分割する.
 
     Args:
@@ -164,10 +156,7 @@ def split_train_validation(
     logger.info(f"訓練データを分割中 (validation_size={config.test_size})...")
 
     train_split, val_split = train_test_split(
-        train_df,
-        test_size=config.test_size,
-        random_state=config.random_state,
-        stratify=None
+        train_df, test_size=config.test_size, random_state=config.random_state, stratify=None
     )
 
     logger.info(f"訓練セット: {train_split.shape}")
@@ -197,49 +186,51 @@ def create_feature_summary(df: pd.DataFrame) -> pd.DataFrame:
     unique_counts = df.nunique()
 
     # 数値列のみに絞って統計を計算
-    numeric_df = df.select_dtypes(include=['number'])
+    numeric_df = df.select_dtypes(include=["number"])
     numeric_stats = numeric_df.describe()
 
-    logger.info(f"処理対象: {len(df.columns)}列 (数値型: {len(numeric_df.columns)}列, 非数値型: {len(df.columns) - len(numeric_df.columns)}列)")
+    logger.info(
+        f"処理対象: {len(df.columns)}列 (数値型: {len(numeric_df.columns)}列, 非数値型: {len(df.columns) - len(numeric_df.columns)}列)"
+    )
 
     # 各列の統計情報を構築
     summary_data = []
     for col in df.columns:
         col_info = {
-            'feature': col,
-            'data_type': str(data_dtypes[col]),
-            'missing_count': missing_counts[col],
-            'unique_count': unique_counts[col]
+            "feature": col,
+            "data_type": str(data_dtypes[col]),
+            "missing_count": missing_counts[col],
+            "unique_count": unique_counts[col],
         }
 
         # 数値列の場合は統計値を追加
         if col in numeric_df.columns:
-            col_info.update({
-                'min_value': numeric_stats.loc['min', col],
-                'max_value': numeric_stats.loc['max', col],
-                'mean_value': numeric_stats.loc['mean', col]
-            })
+            col_info.update(
+                {
+                    "min_value": numeric_stats.loc["min", col],
+                    "max_value": numeric_stats.loc["max", col],
+                    "mean_value": numeric_stats.loc["mean", col],
+                }
+            )
         else:
             # 非数値列の場合はNaNで埋める
-            col_info.update({
-                'min_value': pd.NA,
-                'max_value': pd.NA,
-                'mean_value': pd.NA
-            })
+            col_info.update({"min_value": pd.NA, "max_value": pd.NA, "mean_value": pd.NA})
 
         summary_data.append(col_info)
 
     summary_df = pd.DataFrame(summary_data)
-    summary_df = summary_df.set_index('feature')
+    summary_df = summary_df.set_index("feature")
 
-    logger.info(f"特徴量要約を作成完了: {summary_df.shape[0]}特徴量 × {summary_df.shape[1]}統計項目")
+    logger.info(
+        f"特徴量要約を作成完了: {summary_df.shape[0]}特徴量 × {summary_df.shape[1]}統計項目"
+    )
 
     # 特徴量要約の詳細をログ表示
     logger.info("特徴量要約詳細:")
     logger.info(f"\n{summary_df.to_string()}")
 
     # 欠損値がある特徴量を特別に報告
-    features_with_missing = summary_df[summary_df['missing_count'] > 0]
+    features_with_missing = summary_df[summary_df["missing_count"] > 0]
     if not features_with_missing.empty:
         logger.warning(f"欠損値を含む特徴量: {len(features_with_missing)}個")
         for feature, row in features_with_missing.iterrows():
@@ -256,7 +247,7 @@ def save_processed_data(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    sample_submission_df: pd.DataFrame
+    sample_submission_df: pd.DataFrame,
 ) -> None:
     """処理済みデータセットを保存する.
 
@@ -271,10 +262,10 @@ def save_processed_data(
     # 保存先ディレクトリを確認・作成
     config.processed_data_dir.mkdir(parents=True, exist_ok=True)
 
-    train_path = config.get_processed_path('train')
-    val_path = config.get_processed_path('validation')
-    test_path = config.get_processed_path('test')
-    sample_path = config.get_processed_path('sample_submission')
+    train_path = config.get_processed_path("train")
+    val_path = config.get_processed_path("validation")
+    test_path = config.get_processed_path("test")
+    sample_path = config.get_processed_path("sample_submission")
 
     train_df.to_csv(train_path, index=False)
     val_df.to_csv(val_path, index=False)
@@ -294,11 +285,10 @@ def main():
     logger.info(f"データセット処理を開始 (実験名: {config.exp_name})")
 
     try:
-
         # 生データの読み込み
-        train_path = config.get_raw_path('train')
-        test_path = config.get_raw_path('test')
-        sample_path = config.get_raw_path('sample_submission')
+        train_path = config.get_raw_path("train")
+        test_path = config.get_raw_path("test")
+        sample_path = config.get_raw_path("sample_submission")
 
         dataset = load_raw_data(train_path, test_path, sample_path)
         log_dataset_info(dataset)
@@ -313,7 +303,7 @@ def main():
         feature_summary = create_feature_summary(dataset.train)
 
         # 特徴量要約の保存
-        feature_summary_path = config.get_processed_path('feature_summary')
+        feature_summary_path = config.get_processed_path("feature_summary")
         feature_summary.to_csv(feature_summary_path)
         logger.info(f"特徴量要約を保存: {feature_summary_path}")
 

@@ -25,7 +25,7 @@ try:
     import seaborn as sns
     import scipy.stats as stats
     import japanize_matplotlib
-    
+
     VISUALIZATION_AVAILABLE = True
 except ImportError:
     VISUALIZATION_AVAILABLE = False
@@ -38,9 +38,9 @@ app = typer.Typer()
 
 # プロットスタイル設定
 if VISUALIZATION_AVAILABLE:
-    plt.style.use('default')
+    plt.style.use("default")
     sns.set_palette("husl")
-    mplstyle.use('fast')
+    mplstyle.use("fast")
 
 
 def setup_plot_style() -> None:
@@ -48,13 +48,13 @@ def setup_plot_style() -> None:
     if not VISUALIZATION_AVAILABLE:
         return
 
-    plt.rcParams['figure.figsize'] = (10, 6)
-    plt.rcParams['font.size'] = 10
-    plt.rcParams['axes.titlesize'] = 12
-    plt.rcParams['axes.labelsize'] = 10
-    plt.rcParams['xtick.labelsize'] = 9
-    plt.rcParams['ytick.labelsize'] = 9
-    plt.rcParams['legend.fontsize'] = 9
+    plt.rcParams["figure.figsize"] = (10, 6)
+    plt.rcParams["font.size"] = 10
+    plt.rcParams["axes.titlesize"] = 12
+    plt.rcParams["axes.labelsize"] = 10
+    plt.rcParams["xtick.labelsize"] = 9
+    plt.rcParams["ytick.labelsize"] = 9
+    plt.rcParams["legend.fontsize"] = 9
 
 
 def _open_image_file(file_path: Path) -> None:
@@ -105,10 +105,10 @@ def _create_html_gallery(image_paths: List[Path], output_path: Path) -> None:
 """
 
         for i, (path, relative_path) in enumerate(zip(image_paths, relative_paths)):
-            title = path.stem.replace('_', ' ').title()
+            title = path.stem.replace("_", " ").title()
             html_content += f"""
     <div class="image-container">
-        <div class="image-title">{i+1}. {title}</div>
+        <div class="image-title">{i + 1}. {title}</div>
         <img src="{relative_path}" alt="{title}">
     </div>
 """
@@ -118,7 +118,7 @@ def _create_html_gallery(image_paths: List[Path], output_path: Path) -> None:
 </html>
 """
 
-        output_path.write_text(html_content, encoding='utf-8')
+        output_path.write_text(html_content, encoding="utf-8")
         webbrowser.open(f"file://{output_path.absolute()}")
         logger.success(f"HTMLギャラリーをブラウザで開きました: {output_path}")
 
@@ -146,13 +146,12 @@ def _display_plots(plot_paths: List[Path]) -> None:
         if i < len(plot_paths) - 1:
             # ファイルが開かれるまで少し待機
             import time
+
             time.sleep(0.5)
 
 
 def create_target_distribution_plot(
-    data: pd.DataFrame,
-    target_col: str = "BeatsPerMinute",
-    save_path: Optional[Path] = None
+    data: pd.DataFrame, target_col: str = "BeatsPerMinute", save_path: Optional[Path] = None
 ) -> Optional[Path]:
     """ターゲット変数の分布をプロットする.
 
@@ -169,30 +168,30 @@ def create_target_distribution_plot(
         return None
 
     logger.info(f"ターゲット変数 {target_col} の分布をプロット中...")
-    
-    fig, axes = plt.subplots(2,2, figsize=(15, 10))
-        
-    sns.histplot(data=data, x=target_col, ax=axes[0,0])
-    axes[0,0].set_title('Histogram')
 
-    sns.boxplot(data=data, x=target_col, ax=axes[0,1])
-    axes[0,1].set_title('Box Plot')
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
 
-    sns.violinplot(data=data, x=target_col, ax=axes[1,0])
-    axes[1,0].set_title('Violin Plot')
+    sns.histplot(data=data, x=target_col, ax=axes[0, 0])
+    axes[0, 0].set_title("Histogram")
 
-    stats.probplot(data[target_col], dist="norm", plot=axes[1,1])
-    axes[1,1].set_title('Q-Q Plot (Normal Distribution)')
+    sns.boxplot(data=data, x=target_col, ax=axes[0, 1])
+    axes[0, 1].set_title("Box Plot")
 
-    plt.suptitle(f'{target_col} Distribution Analysis', fontsize=16)
-    plt.tight_layout()    
+    sns.violinplot(data=data, x=target_col, ax=axes[1, 0])
+    axes[1, 0].set_title("Violin Plot")
+
+    stats.probplot(data[target_col], dist="norm", plot=axes[1, 1])
+    axes[1, 1].set_title("Q-Q Plot (Normal Distribution)")
+
+    plt.suptitle(f"{target_col} Distribution Analysis", fontsize=16)
+    plt.tight_layout()
 
     if save_path is None:
         save_path = FIGURES_DIR / "target_distribution.png"
 
     # プロット保存
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
 
     logger.success(f"ターゲット分布プロットを保存: {save_path}")
@@ -200,9 +199,7 @@ def create_target_distribution_plot(
 
 
 def create_feature_distribution_plots(
-    data: pd.DataFrame,
-    feature_cols: List[str],
-    save_path: Optional[Path] = None
+    data: pd.DataFrame, feature_cols: List[str], save_path: Optional[Path] = None
 ) -> Optional[Path]:
     """特徴量の分布をプロットする.
 
@@ -229,21 +226,21 @@ def create_feature_distribution_plots(
     for i, col in enumerate(feature_cols):
         if i < len(axes):
             sns.histplot(data=data, x=col, ax=axes[i], kde=True)
-            axes[i].set_title(f'Distribution of {col}')
+            axes[i].set_title(f"Distribution of {col}")
             plt.setp(axes[i].get_xticklabels(), rotation=45)
 
     # 余ったサブプロットを非表示
     for i in range(len(feature_cols), len(axes)):
         axes[i].set_visible(False)
 
-    plt.suptitle('Feature Distributions', fontsize=16)
+    plt.suptitle("Feature Distributions", fontsize=16)
     plt.tight_layout()
 
     if save_path is None:
         save_path = FIGURES_DIR / "feature_distributions.png"
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
 
     logger.success(f"特徴量分布プロットを保存: {save_path}")
@@ -254,7 +251,7 @@ def create_correlation_heatmap(
     data: pd.DataFrame,
     feature_cols: List[str],
     target_col: str = "BeatsPerMinute",
-    save_path: Optional[Path] = None
+    save_path: Optional[Path] = None,
 ) -> Optional[Path]:
     """相関ヒートマップを作成する.
 
@@ -277,25 +274,25 @@ def create_correlation_heatmap(
     correlation_cols = feature_cols + [target_col]
     correlation_matrix = data[correlation_cols].corr()
 
-    plt.figure(figsize=(12,10))
+    plt.figure(figsize=(12, 10))
     sns.heatmap(
         correlation_matrix,
         annot=True,
-        cmap='coolwarm',
+        cmap="coolwarm",
         center=0,
         square=True,
-        fmt='.2f',
-        cbar_kws={'shrink': 0.8}
+        fmt=".2f",
+        cbar_kws={"shrink": 0.8},
     )
-    
-    plt.title('Feature Correlation Heatmap', fontsize=16)
+
+    plt.title("Feature Correlation Heatmap", fontsize=16)
     plt.tight_layout()
 
     if save_path is None:
         save_path = FIGURES_DIR / "correlation_heatmap.png"
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
 
     logger.success(f"相関ヒートマップを保存: {save_path}")
@@ -306,7 +303,7 @@ def create_target_vs_features_plots(
     data: pd.DataFrame,
     feature_cols: List[str],
     target_col: str = "BeatsPerMinute",
-    save_path: Optional[Path] = None
+    save_path: Optional[Path] = None,
 ) -> Optional[Path]:
     """ターゲット vs 特徴量の散布図を作成する.
 
@@ -334,29 +331,31 @@ def create_target_vs_features_plots(
     for i, col in enumerate(feature_cols):
         if i < len(axes):
             sns.scatterplot(data=data, x=col, y=target_col, ax=axes[i], alpha=0.6)
-            axes[i].set_title(f'{target_col} vs {col}')
+            axes[i].set_title(f"{target_col} vs {col}")
             corr = data[col].corr(data[target_col])
             axes[i].text(
-                0.05, 0.95,
-                f'r = {corr:.3f}',
+                0.05,
+                0.95,
+                f"r = {corr:.3f}",
                 transform=axes[i].transAxes,
                 fontsize=10,
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
-                ha='left', va='top'
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+                ha="left",
+                va="top",
             )
 
     # 余ったサブプロットを非表示
     for i in range(len(feature_cols), len(axes)):
         axes[i].set_visible(False)
 
-    plt.suptitle(f'{target_col} vs Features Scatter Plots', fontsize=16)
+    plt.suptitle(f"{target_col} vs Features Scatter Plots", fontsize=16)
     plt.tight_layout()
 
     if save_path is None:
         save_path = FIGURES_DIR / "target_vs_features.png"
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
 
     logger.success(f"ターゲット vs 特徴量プロットを保存: {save_path}")
@@ -364,10 +363,8 @@ def create_target_vs_features_plots(
 
 
 def detect_outliers_zscore(
-    data: pd.DataFrame,
-    feature_cols: List[str],
-    threshold: float = 3.0
-    ) -> pd.Series:
+    data: pd.DataFrame, feature_cols: List[str], threshold: float = 3.0
+) -> pd.Series:
     """Z-score法による外れ値検出.
 
     Args:
@@ -381,7 +378,7 @@ def detect_outliers_zscore(
     import numpy as np
 
     numeric_features = data[feature_cols].select_dtypes(include=[np.number])
-    z_scores = np.abs(stats.zscore(numeric_features, nan_policy='omit'))
+    z_scores = np.abs(stats.zscore(numeric_features, nan_policy="omit"))
     outliers = (z_scores > threshold).any(axis=1)
     return outliers
 
@@ -398,7 +395,7 @@ def detect_outliers_iqr(data: pd.DataFrame, feature_cols: List[str]) -> pd.Serie
     """
     outlier_indices = set()
     for col in feature_cols:
-        if data[col].dtype in ['int64', 'float64']:
+        if data[col].dtype in ["int64", "float64"]:
             Q1 = data[col].quantile(0.25)
             Q3 = data[col].quantile(0.75)
             IQR = Q3 - Q1
@@ -412,7 +409,9 @@ def detect_outliers_iqr(data: pd.DataFrame, feature_cols: List[str]) -> pd.Serie
     return outliers_series
 
 
-def detect_outliers_isolation_forest(data: pd.DataFrame, feature_cols: List[str], contamination: float = 0.1) -> pd.Series:
+def detect_outliers_isolation_forest(
+    data: pd.DataFrame, feature_cols: List[str], contamination: float = 0.1
+) -> pd.Series:
     """Isolation Forest法による外れ値検出.
 
     Args:
@@ -426,14 +425,16 @@ def detect_outliers_isolation_forest(data: pd.DataFrame, feature_cols: List[str]
     try:
         from sklearn.ensemble import IsolationForest
 
-        numeric_features = data[feature_cols].select_dtypes(include=['int64', 'float64'])
+        numeric_features = data[feature_cols].select_dtypes(include=["int64", "float64"])
         iso_forest = IsolationForest(contamination=contamination, random_state=42)
         outliers_pred = iso_forest.fit_predict(numeric_features)
         # -1が異常値、1が正常値
         outliers = pd.Series(outliers_pred == -1, index=data.index)
         return outliers
     except ImportError:
-        logger.warning("scikit-learn がインストールされていません。Isolation Forest をスキップします")
+        logger.warning(
+            "scikit-learn がインストールされていません。Isolation Forest をスキップします"
+        )
         return pd.Series(False, index=data.index)
 
 
@@ -460,7 +461,7 @@ def create_outlier_detection_plot(
     data: pd.DataFrame,
     feature_cols: List[str],
     target_col: str = "BeatsPerMinute",
-    save_path: Optional[Path] = None
+    save_path: Optional[Path] = None,
 ) -> Optional[Path]:
     """外れ値検出プロットを作成する.
 
@@ -490,48 +491,50 @@ def create_outlier_detection_plot(
     best_feature = data[feature_cols].corrwith(data[target_col]).abs().idxmax()
 
     # 1. Z-Score法（左上）
-    colors_zscore = ['red' if outlier else 'blue' for outlier in outliers_zscore]
+    colors_zscore = ["red" if outlier else "blue" for outlier in outliers_zscore]
     axes[0, 0].scatter(data[best_feature], data[target_col], c=colors_zscore, alpha=0.6)
-    axes[0, 0].set_title(f'Z-Score Method (Outliers: {sum(outliers_zscore)})')
+    axes[0, 0].set_title(f"Z-Score Method (Outliers: {sum(outliers_zscore)})")
     axes[0, 0].set_xlabel(best_feature)
     axes[0, 0].set_ylabel(target_col)
 
     # 2. IQR法（右上）
-    colors_iqr = ['red' if outlier else 'blue' for outlier in outliers_iqr]
+    colors_iqr = ["red" if outlier else "blue" for outlier in outliers_iqr]
     axes[0, 1].scatter(data[best_feature], data[target_col], c=colors_iqr, alpha=0.6)
-    axes[0, 1].set_title(f'IQR Method (Outliers: {sum(outliers_iqr)})')
+    axes[0, 1].set_title(f"IQR Method (Outliers: {sum(outliers_iqr)})")
     axes[0, 1].set_xlabel(best_feature)
     axes[0, 1].set_ylabel(target_col)
 
     # 3. Isolation Forest法（左下）
-    colors_iso = ['red' if outlier else 'blue' for outlier in outliers_isolation_forest]
+    colors_iso = ["red" if outlier else "blue" for outlier in outliers_isolation_forest]
     axes[1, 0].scatter(data[best_feature], data[target_col], c=colors_iso, alpha=0.6)
-    axes[1, 0].set_title(f'Isolation Forest (Outliers: {sum(outliers_isolation_forest)})')
+    axes[1, 0].set_title(f"Isolation Forest (Outliers: {sum(outliers_isolation_forest)})")
     axes[1, 0].set_xlabel(best_feature)
     axes[1, 0].set_ylabel(target_col)
 
     # 4. ターゲット変数外れ値（右下）
-    colors_target = ['red' if outlier else 'blue' for outlier in outliers_target]
+    colors_target = ["red" if outlier else "blue" for outlier in outliers_target]
     axes[1, 1].scatter(data[best_feature], data[target_col], c=colors_target, alpha=0.6)
-    axes[1, 1].set_title(f'Target Outliers (Outliers: {sum(outliers_target)})')
+    axes[1, 1].set_title(f"Target Outliers (Outliers: {sum(outliers_target)})")
     axes[1, 1].set_xlabel(best_feature)
     axes[1, 1].set_ylabel(target_col)
 
     # 凡例を追加
     from matplotlib.patches import Patch
-    legend_elements = [Patch(facecolor='blue', label='Normal'),
-                      Patch(facecolor='red', label='Outlier')]
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.02), ncol=2)
 
-    plt.suptitle('Outlier Detection Methods Comparison', fontsize=16, y=0.95)
+    legend_elements = [
+        Patch(facecolor="blue", label="Normal"),
+        Patch(facecolor="red", label="Outlier"),
+    ]
+    fig.legend(handles=legend_elements, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=2)
+
+    plt.suptitle("Outlier Detection Methods Comparison", fontsize=16, y=0.95)
     plt.tight_layout()
-
 
     if save_path is None:
         save_path = FIGURES_DIR / "outlier_detection.png"
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
 
     logger.success(f"外れ値検出プロットを保存: {save_path}")
@@ -577,27 +580,37 @@ def create_eda_plots(
     plots_created = []
 
     # 1. ターゲット分布分析
-    plot_path = create_target_distribution_plot(data, target_col, output_dir / "target_distribution.png")
+    plot_path = create_target_distribution_plot(
+        data, target_col, output_dir / "target_distribution.png"
+    )
     if plot_path is not None:
         plots_created.append(plot_path)
 
     # 2. 特徴量分布
-    plot_path = create_feature_distribution_plots(data, feature_cols, output_dir / "feature_distributions.png")
+    plot_path = create_feature_distribution_plots(
+        data, feature_cols, output_dir / "feature_distributions.png"
+    )
     if plot_path is not None:
         plots_created.append(plot_path)
 
     # 3. 相関ヒートマップ
-    plot_path = create_correlation_heatmap(data, feature_cols, target_col, output_dir / "correlation_heatmap.png")
+    plot_path = create_correlation_heatmap(
+        data, feature_cols, target_col, output_dir / "correlation_heatmap.png"
+    )
     if plot_path is not None:
         plots_created.append(plot_path)
 
     # 4. ターゲットvs特徴量散布図
-    plot_path = create_target_vs_features_plots(data, feature_cols, target_col, output_dir / "target_vs_features.png")
+    plot_path = create_target_vs_features_plots(
+        data, feature_cols, target_col, output_dir / "target_vs_features.png"
+    )
     if plot_path is not None:
         plots_created.append(plot_path)
 
     # 5. 外れ値検出プロット
-    plot_path = create_outlier_detection_plot(data, feature_cols, target_col, output_dir / "outlier_detection.png")
+    plot_path = create_outlier_detection_plot(
+        data, feature_cols, target_col, output_dir / "outlier_detection.png"
+    )
     if plot_path is not None:
         plots_created.append(plot_path)
 
