@@ -6,6 +6,9 @@ KaggleのBPM予測コンペティション用EDAとプロット機能
 # %%
 
 import sys
+import subprocess
+import platform
+import webbrowser
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -52,6 +55,98 @@ def setup_plot_style() -> None:
     plt.rcParams['xtick.labelsize'] = 9
     plt.rcParams['ytick.labelsize'] = 9
     plt.rcParams['legend.fontsize'] = 9
+
+
+def _open_image_file(file_path: Path) -> None:
+    """システムの既定アプリで画像ファイルを開く.
+
+    Args:
+        file_path: 開く画像ファイルのパス
+    """
+    try:
+        if platform.system() == "Windows":
+            subprocess.run(["start", str(file_path)], shell=True, check=True)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.run(["open", str(file_path)], check=True)
+        else:  # Linux
+            subprocess.run(["xdg-open", str(file_path)], check=True)
+        logger.success(f"画像ファイルを開きました: {file_path.name}")
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"画像ファイルを開けませんでした: {file_path.name} - {e}")
+    except FileNotFoundError:
+        logger.warning(f"画像表示コマンドが見つかりません。手動で確認してください: {file_path}")
+
+
+def _create_html_gallery(image_paths: List[Path], output_path: Path) -> None:
+    """画像ギャラリーのHTMLファイルを作成しブラウザで開く.
+
+    Args:
+        image_paths: 画像ファイルパスのリスト
+        output_path: HTMLファイルの出力パス
+    """
+    try:
+        relative_paths = [path.relative_to(output_path.parent) for path in image_paths]
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>EDA Results - BPM Prediction</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        h1 {{ color: #333; }}
+        .image-container {{ margin: 20px 0; }}
+        img {{ max-width: 100%; height: auto; border: 1px solid #ddd; margin: 10px 0; }}
+        .image-title {{ font-size: 18px; font-weight: bold; margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h1>EDA Results - Beats Per Minute Prediction</h1>
+    <p>生成された画像数: {len(image_paths)}</p>
+"""
+
+        for i, (path, relative_path) in enumerate(zip(image_paths, relative_paths)):
+            title = path.stem.replace('_', ' ').title()
+            html_content += f"""
+    <div class="image-container">
+        <div class="image-title">{i+1}. {title}</div>
+        <img src="{relative_path}" alt="{title}">
+    </div>
+"""
+
+        html_content += """
+</body>
+</html>
+"""
+
+        output_path.write_text(html_content, encoding='utf-8')
+        webbrowser.open(f"file://{output_path.absolute()}")
+        logger.success(f"HTMLギャラリーをブラウザで開きました: {output_path}")
+
+    except Exception as e:
+        logger.error(f"HTMLギャラリーの作成に失敗しました: {e}")
+
+
+def _display_plots(plot_paths: List[Path]) -> None:
+    """作成されたプロットを表示する.
+
+    Args:
+        plot_paths: 表示する画像ファイルパスのリスト
+    """
+    if not plot_paths:
+        logger.warning("表示する画像がありません")
+        return
+
+    # HTMLギャラリーを優先的に作成
+    html_path = plot_paths[0].parent / "eda_gallery.html"
+    _create_html_gallery(plot_paths, html_path)
+
+    # 個別ファイルも開く（最大3つまで）
+    for i, plot_path in enumerate(plot_paths[:3]):
+        _open_image_file(plot_path)
+        if i < len(plot_paths) - 1:
+            # ファイルが開かれるまで少し待機
+            import time
+            time.sleep(0.5)
 
 
 def create_target_distribution_plot(
@@ -135,7 +230,7 @@ def create_feature_distribution_plots(
         if i < len(axes):
             sns.histplot(data=data, x=col, ax=axes[i], kde=True)
             axes[i].set_title(f'Distribution of {col}')
-            plt.setp(axes[i].get_xticklabes(), rotation=45)
+            plt.setp(axes[i].get_xticklabels(), rotation=45)
 
     # 余ったサブプロットを非表示
     for i in range(len(feature_cols), len(axes)):
@@ -236,16 +331,19 @@ def create_target_vs_features_plots(
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
     axes = axes.flatten() if n_rows > 1 else [axes]
 
-    # TODO(human): ターゲットvs特徴量の散布図作成
-    # 各特徴量とターゲット変数の関係を可視化してください：
     for i, col in enumerate(feature_cols):
         if i < len(axes):
-            # TODO(human): 散布図の描画
-            # 1. sns.scatterplot(data=data, x=col, y=target_col, ax=axes[i], alpha=0.6)
-            # 2. axes[i].set_title(f'{target_col} vs {col}')
-            # 3. 相関係数を計算: corr = data[col].corr(data[target_col])
-            # 4. 相関係数をプロット上に表示 (axes[i].text使用)
-            # pass  # TODO(human): ここに実装してください
+            sns.scatterplot(data=data, x=col, y=target_col, ax=axes[i], alpha=0.6)
+            axes[i].set_title(f'{target_col} vs {col}')
+            corr = data[col].corr(data[target_col])
+            axes[i].text(
+                0.05, 0.95,
+                f'r = {corr:.3f}',
+                transform=axes[i].transAxes,
+                fontsize=10,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
+                ha='left', va='top'
+            )
 
     # 余ったサブプロットを非表示
     for i in range(len(feature_cols), len(axes)):
@@ -263,6 +361,99 @@ def create_target_vs_features_plots(
 
     logger.success(f"ターゲット vs 特徴量プロットを保存: {save_path}")
     return save_path
+
+
+def detect_outliers_zscore(
+    data: pd.DataFrame,
+    feature_cols: List[str],
+    threshold: float = 3.0
+    ) -> pd.Series:
+    """Z-score法による外れ値検出.
+
+    Args:
+        data: データフレーム
+        feature_cols: 対象特徴量のカラム名リスト
+        threshold: Z-scoreの閾値
+
+    Returns:
+        外れ値のブール値シリーズ
+    """
+    import numpy as np
+
+    numeric_features = data[feature_cols].select_dtypes(include=[np.number])
+    z_scores = np.abs(stats.zscore(numeric_features, nan_policy='omit'))
+    outliers = (z_scores > threshold).any(axis=1)
+    return outliers
+
+
+def detect_outliers_iqr(data: pd.DataFrame, feature_cols: List[str]) -> pd.Series:
+    """IQR法による外れ値検出.
+
+    Args:
+        data: データフレーム
+        feature_cols: 対象特徴量のカラム名リスト
+
+    Returns:
+        外れ値のブール値シリーズ
+    """
+    outlier_indices = set()
+    for col in feature_cols:
+        if data[col].dtype in ['int64', 'float64']:
+            Q1 = data[col].quantile(0.25)
+            Q3 = data[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            outliers = data[(data[col] < lower_bound) | (data[col] > upper_bound)].index
+            outlier_indices.update(outliers)
+
+    outliers_series = pd.Series(False, index=data.index)
+    outliers_series.iloc[list(outlier_indices)] = True
+    return outliers_series
+
+
+def detect_outliers_isolation_forest(data: pd.DataFrame, feature_cols: List[str], contamination: float = 0.1) -> pd.Series:
+    """Isolation Forest法による外れ値検出.
+
+    Args:
+        data: データフレーム
+        feature_cols: 対象特徴量のカラム名リスト
+        contamination: 異常値の割合
+
+    Returns:
+        外れ値のブール値シリーズ
+    """
+    try:
+        from sklearn.ensemble import IsolationForest
+
+        numeric_features = data[feature_cols].select_dtypes(include=['int64', 'float64'])
+        iso_forest = IsolationForest(contamination=contamination, random_state=42)
+        outliers_pred = iso_forest.fit_predict(numeric_features)
+        # -1が異常値、1が正常値
+        outliers = pd.Series(outliers_pred == -1, index=data.index)
+        return outliers
+    except ImportError:
+        logger.warning("scikit-learn がインストールされていません。Isolation Forest をスキップします")
+        return pd.Series(False, index=data.index)
+
+
+def detect_target_outliers(data: pd.DataFrame, target_col: str) -> pd.Series:
+    """ターゲット変数の外れ値検出.
+
+    Args:
+        data: データフレーム
+        target_col: ターゲット変数のカラム名
+
+    Returns:
+        外れ値のブール値シリーズ
+    """
+    Q1 = data[target_col].quantile(0.25)
+    Q3 = data[target_col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = (data[target_col] < lower_bound) | (data[target_col] > upper_bound)
+    return outliers
 
 
 def create_outlier_detection_plot(
@@ -288,26 +479,60 @@ def create_outlier_detection_plot(
 
     logger.info("外れ値検出プロットを作成中...")
 
-    # TODO(human): 外れ値検出のための複数手法プロット
-    # 以下の4つの手法で外れ値を可視化してください：
-    # 1. Z-scoreによる外れ値検出 (scipy.stats.zscore使用)
-    # 2. IQR法による外れ値検出
-    # 3. Isolation Forestによる異常検知 (sklearn.ensemble.IsolationForest)
-    # 4. ターゲット変数の外れ値とのクロス分析
-    #
-    # 2x2のサブプロットを作成し、各手法の結果を可視化してください
-    # fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    outliers_zscore = detect_outliers_zscore(data, feature_cols)
+    outliers_iqr = detect_outliers_iqr(data, feature_cols)
+    outliers_isolation_forest = detect_outliers_isolation_forest(data, feature_cols)
+    outliers_target = detect_target_outliers(data, target_col)
 
-    # TODO(human): ここに外れ値検出ロジックを実装してください
-    # ヒント：異なる色で正常データと外れ値を区別して表示
-    pass
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    # 最も相関の高い特徴量を選択（X軸用）
+    best_feature = data[feature_cols].corrwith(data[target_col]).abs().idxmax()
+
+    # 1. Z-Score法（左上）
+    colors_zscore = ['red' if outlier else 'blue' for outlier in outliers_zscore]
+    axes[0, 0].scatter(data[best_feature], data[target_col], c=colors_zscore, alpha=0.6)
+    axes[0, 0].set_title(f'Z-Score Method (Outliers: {sum(outliers_zscore)})')
+    axes[0, 0].set_xlabel(best_feature)
+    axes[0, 0].set_ylabel(target_col)
+
+    # 2. IQR法（右上）
+    colors_iqr = ['red' if outlier else 'blue' for outlier in outliers_iqr]
+    axes[0, 1].scatter(data[best_feature], data[target_col], c=colors_iqr, alpha=0.6)
+    axes[0, 1].set_title(f'IQR Method (Outliers: {sum(outliers_iqr)})')
+    axes[0, 1].set_xlabel(best_feature)
+    axes[0, 1].set_ylabel(target_col)
+
+    # 3. Isolation Forest法（左下）
+    colors_iso = ['red' if outlier else 'blue' for outlier in outliers_isolation_forest]
+    axes[1, 0].scatter(data[best_feature], data[target_col], c=colors_iso, alpha=0.6)
+    axes[1, 0].set_title(f'Isolation Forest (Outliers: {sum(outliers_isolation_forest)})')
+    axes[1, 0].set_xlabel(best_feature)
+    axes[1, 0].set_ylabel(target_col)
+
+    # 4. ターゲット変数外れ値（右下）
+    colors_target = ['red' if outlier else 'blue' for outlier in outliers_target]
+    axes[1, 1].scatter(data[best_feature], data[target_col], c=colors_target, alpha=0.6)
+    axes[1, 1].set_title(f'Target Outliers (Outliers: {sum(outliers_target)})')
+    axes[1, 1].set_xlabel(best_feature)
+    axes[1, 1].set_ylabel(target_col)
+
+    # 凡例を追加
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor='blue', label='Normal'),
+                      Patch(facecolor='red', label='Outlier')]
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.02), ncol=2)
+
+    plt.suptitle('Outlier Detection Methods Comparison', fontsize=16, y=0.95)
+    plt.tight_layout()
+
 
     if save_path is None:
         save_path = FIGURES_DIR / "outlier_detection.png"
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    # plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    # plt.close()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
 
     logger.success(f"外れ値検出プロットを保存: {save_path}")
     return save_path
@@ -317,6 +542,7 @@ def create_outlier_detection_plot(
 def create_eda_plots(
     train_data_path: Path = PROCESSED_DATA_DIR / "train.csv",
     output_dir: Path = FIGURES_DIR,
+    show: bool = typer.Option(False, "--show", "-s", help="プロット作成後に画像を表示する"),
 ) -> None:
     """包括的なEDAプロットを作成する.
 
@@ -350,23 +576,39 @@ def create_eda_plots(
     # 各種プロットの作成
     plots_created = []
 
-    # TODO(human): EDAプロットパイプラインの実装
-    # 以下の順序で各プロット関数を呼び出し、結果をplots_createdリストに追加してください：
-    #
-    # 1. create_target_distribution_plot() - ターゲット分布分析
-    # 2. create_feature_distribution_plots() - 特徴量分布
-    # 3. create_correlation_heatmap() - 相関ヒートマップ
-    # 4. create_target_vs_features_plots() - ターゲットvs特徴量散布図
-    # 5. create_outlier_detection_plot() - 外れ値検出プロット（新機能）
-    #
-    # 各関数が戻り値を返した場合のみplots_created.append()で追加してください
+    # 1. ターゲット分布分析
+    plot_path = create_target_distribution_plot(data, target_col, output_dir / "target_distribution.png")
+    if plot_path is not None:
+        plots_created.append(plot_path)
 
-    # TODO(human): ここに5つのプロット作成コードを実装してください
-    pass
+    # 2. 特徴量分布
+    plot_path = create_feature_distribution_plots(data, feature_cols, output_dir / "feature_distributions.png")
+    if plot_path is not None:
+        plots_created.append(plot_path)
+
+    # 3. 相関ヒートマップ
+    plot_path = create_correlation_heatmap(data, feature_cols, target_col, output_dir / "correlation_heatmap.png")
+    if plot_path is not None:
+        plots_created.append(plot_path)
+
+    # 4. ターゲットvs特徴量散布図
+    plot_path = create_target_vs_features_plots(data, feature_cols, target_col, output_dir / "target_vs_features.png")
+    if plot_path is not None:
+        plots_created.append(plot_path)
+
+    # 5. 外れ値検出プロット
+    plot_path = create_outlier_detection_plot(data, feature_cols, target_col, output_dir / "outlier_detection.png")
+    if plot_path is not None:
+        plots_created.append(plot_path)
 
     logger.success(f"EDAプロット作成完了! 作成されたファイル数: {len(plots_created)}")
     for plot_path in plots_created:
         logger.info(f"  - {plot_path}")
+
+    # プロット表示機能
+    if show and plots_created:
+        logger.info("画像ファイルを表示中...")
+        _display_plots(plots_created)
 
 
 @app.command()
