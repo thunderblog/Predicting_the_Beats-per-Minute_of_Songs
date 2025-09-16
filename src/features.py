@@ -125,7 +125,6 @@ def create_statistical_features(df: pd.DataFrame) -> pd.DataFrame:
     return df_features
 
 
-# TODO(human): Implement advanced feature selection logic
 def select_features(
     X_train: pd.DataFrame,
     y_train: pd.Series,
