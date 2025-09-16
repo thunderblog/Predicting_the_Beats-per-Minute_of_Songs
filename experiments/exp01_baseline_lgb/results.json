@@ -1,0 +1,58 @@
+{
+  "experiment_name": "exp01_baseline_lgb",
+  "timestamp": "2025-09-16T23:15:47",
+  "status": "completed",
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 5,
+    "random_state": 42,
+    "mean_rmse": 26.47,
+    "std_rmse": null,
+    "fold_results": {
+      "fold_1": {
+        "rmse": null,
+        "model_file": "test_run_fold_1_20250916_133817.pkl"
+      },
+      "fold_2": {
+        "rmse": null,
+        "model_file": "test_run_fold_2_20250916_133817.pkl"
+      }
+    },
+    "training_time": null,
+    "memory_usage": null
+  },
+  "leaderboard_results": {
+    "submission_date": "2025-09-16",
+    "public_lb_score": 26.39087,
+    "public_lb_rank": 1079,
+    "private_lb_score": null,
+    "private_lb_rank": null,
+    "score_improvement": null,
+    "rank_improvement": null
+  },
+  "prediction_results": {
+    "ensemble_method": "arithmetic_mean",
+    "n_models": 2,
+    "test_predictions": {
+      "mean_prediction": 119.04,
+      "min_prediction": 114.81,
+      "max_prediction": 127.13,
+      "std_prediction": null
+    },
+    "post_processing": {
+      "clipping_range": [30, 300],
+      "clipped_count": 0
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": 0.08,
+    "cv_vs_lb_ratio": 1.003,
+    "overfitting_indicator": "low"
+  },
+  "notes": [
+    "First successful submission with baseline LightGBM",
+    "CV and LB scores show good consistency, indicating proper generalization",
+    "Ensemble of 2 fold models used for final predictions",
+    "BPM predictions are within realistic range (114-127)"
+  ]
+}

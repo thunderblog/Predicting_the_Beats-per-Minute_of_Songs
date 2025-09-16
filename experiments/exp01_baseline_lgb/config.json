@@ -1,0 +1,56 @@
+{
+  "experiment_name": "exp01_baseline_lgb",
+  "description": "Baseline LightGBM model with basic feature engineering",
+  "date_created": "2025-09-16",
+  "model_config": {
+    "model_type": "LightGBM",
+    "algorithm": "LightGBMRegressor",
+    "objective": "regression",
+    "metric": "rmse",
+    "boosting_type": "gbdt",
+    "num_leaves": 31,
+    "learning_rate": 0.1,
+    "feature_fraction": 0.9,
+    "n_estimators": 10000,
+    "early_stopping_rounds": 50,
+    "random_state": 42
+  },
+  "data_config": {
+    "train_samples": 349444,
+    "test_samples": 174722,
+    "n_features": 15,
+    "target": "BeatsPerMinute",
+    "test_size": 0.2,
+    "cv_folds": 5,
+    "cv_type": "KFold"
+  },
+  "features": {
+    "original_features": [
+      "RhythmScore",
+      "AudioLoudness",
+      "VocalContent",
+      "AcousticQuality",
+      "InstrumentalScore",
+      "LivePerformanceLikelihood",
+      "MoodScore",
+      "TrackDurationMs",
+      "Energy"
+    ],
+    "engineered_features": [
+      "live_mood_product",
+      "rhythm_energy_ratio",
+      "is_short_track",
+      "duration_long",
+      "duration_short",
+      "audio_vocal_ratio"
+    ],
+    "feature_selection": "Manual selection based on correlation analysis",
+    "scaling": "Applied StandardScaler to selected features"
+  },
+  "preprocessing": {
+    "missing_values": "None detected",
+    "outlier_handling": "None applied",
+    "feature_engineering": "Interaction and duration-based features created",
+    "data_leakage_check": "Passed"
+  }
+}

@@ -233,3 +233,144 @@ feature/ticket-003/prediction-pipeline
      - エンドツーエンドパイプライン
      - サブミッション形式での出力
      - 複数モデル実行機能
+
+## 実験管理システム
+
+### 実験結果の記録構造
+各実験は `experiments/` ディレクトリ配下に独立したディレクトリを作成して管理する。
+
+```
+experiments/
+├── exp01_baseline_lgb/          # 実験ディレクトリ（命名規則: exp{番号}_{概要}）
+│   ├── config.json              # 実験設定・ハイパーパラメータ
+│   ├── results.json             # CV・LB結果・性能指標
+│   ├── submission.csv           # Kaggle提出ファイル
+│   ├── models/                  # 訓練済みモデルファイル
+│   │   ├── {exp_name}_fold_1_*.pkl
+│   │   └── {exp_name}_fold_2_*.pkl
+│   └── README.md                # 実験メモ・考察・Next Steps
+├── exp02_feature_engineering/   # 次の実験例
+└── exp03_model_ensemble/        # 次の実験例
+```
+
+### ファイル構成の詳細
+
+#### config.json - 実験設定
+```json
+{
+  "experiment_name": "exp01_baseline_lgb",
+  "description": "実験の目的・概要",
+  "date_created": "YYYY-MM-DD",
+  "model_config": {
+    "model_type": "LightGBM",
+    "ハイパーパラメータ": "値"
+  },
+  "data_config": {
+    "train_samples": 数値,
+    "test_samples": 数値,
+    "n_features": 数値,
+    "cv_folds": 数値
+  },
+  "features": {
+    "original_features": ["特徴量リスト"],
+    "engineered_features": ["特徴量リスト"],
+    "feature_selection": "手法説明",
+    "scaling": "スケーリング手法"
+  },
+  "preprocessing": {
+    "missing_values": "欠損値処理",
+    "outlier_handling": "外れ値処理",
+    "feature_engineering": "特徴量エンジニアリング概要"
+  }
+}
+```
+
+#### results.json - 実験結果
+```json
+{
+  "experiment_name": "実験名",
+  "timestamp": "実行日時",
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 数値,
+    "mean_rmse": 数値,
+    "fold_results": {
+      "fold_1": {"rmse": 数値, "model_file": "ファイル名"}
+    }
+  },
+  "leaderboard_results": {
+    "submission_date": "提出日",
+    "public_lb_score": 数値,
+    "public_lb_rank": 数値,
+    "private_lb_score": 数値,
+    "private_lb_rank": 数値
+  },
+  "prediction_results": {
+    "ensemble_method": "アンサンブル手法",
+    "n_models": 数値,
+    "test_predictions": {
+      "mean_prediction": 数値,
+      "min_prediction": 数値,
+      "max_prediction": 数値
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": "CV-LB差",
+    "overfitting_indicator": "過学習判定"
+  },
+  "notes": ["実験で得られた知見・気づき"]
+}
+```
+
+#### README.md - 実験メモ
+各実験ディレクトリに以下の構成でREADME.mdを作成：
+
+```markdown
+# Experiment XX: 実験名
+
+## 概要
+- 実験目的・仮説
+- 実施日・所要時間
+
+## モデル性能
+### Cross Validation Results
+- CV Score、戦略、フォールド数
+
+### Leaderboard Results
+- Public/Private LB Score
+- 順位・改善幅
+
+## モデル設定
+- アルゴリズム・ハイパーパラメータ
+- 特徴量リスト・エンジニアリング内容
+
+## 技術実装
+- 予測パイプライン概要
+- ファイル構成
+
+## 考察・気づき
+### 成功要因
+### 改善の余地
+
+## Next Steps
+- 次回実験のアイデア・改善案
+```
+
+### 実験管理のベストプラクティス
+
+#### 命名規則
+- **実験ディレクトリ**: `exp{番号2桁}_{概要}`（例：`exp01_baseline_lgb`）
+- **日付形式**: `YYYY-MM-DD`で統一
+- **モデルファイル**: 既存の命名規則`{exp_name}_fold_{N}_{timestamp}.pkl`を継承
+
+#### 記録すべき情報
+1. **再現性確保**: 設定・パラメータ・データ分割・乱数シード
+2. **性能追跡**: CV・LB・Private LB・順位変動
+3. **技術詳細**: アンサンブル手法・後処理・特徴量
+4. **知見蓄積**: 成功要因・失敗要因・改善案
+
+#### 実験後のルーチン
+1. 結果確認後、即座に`experiments/{exp_name}/`ディレクトリを作成
+2. config.json・results.json・README.mdを作成
+3. submission.csvとmodelファイルをコピー
+4. 次回実験のためのNext Stepsを記録

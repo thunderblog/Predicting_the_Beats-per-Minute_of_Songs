@@ -200,3 +200,8 @@ cython_debug/
 .pypirc
 
 reports/figures/
+
+# Experiment management - exclude large files but keep metadata
+experiments/*/submission.csv
+experiments/*/models/
+# Keep: experiments/*/config.json, experiments/*/results.json, experiments/*/README.md
