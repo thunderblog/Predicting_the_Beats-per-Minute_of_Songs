@@ -199,15 +199,15 @@ feature/ticket-003/prediction-pipeline
      - スケーリング機能（Standard・Robust・MinMaxスケーラ対応）
 
 ### 第3段階: モデル開発
-4. **[TICKET-002] LightGBM回帰モデルの訓練機能**
+4. **[TICKET-002] LightGBM回帰モデルの訓練機能** ✅ **完了**
    - ファイル: `src/modeling/train.py`
-   - 現状: プレースホルダーコード
+   - 現状: 実装完了
    - 要件:
-     - LightGBMRegressor実装
-     - script/my_config.pyの設定を利用
-     - クロスバリデーション
-     - モデル保存機能
-     - RMSEメトリクス
+     - LightGBMRegressor実装（scripts/my_config.py設定利用）
+     - クロスバリデーション機能（KFold対応）
+     - モデル保存機能（pickle + JSON結果）
+     - RMSEメトリクス（平均RMSE: 26.47）
+     - Early Stopping & ログ出力機能
 
 5. **[TICKET-003] モデル推論機能の実装**
    - ファイル: `src/modeling/predict.py`
