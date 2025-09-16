@@ -1,0 +1,3 @@
+python -m src.features --create-interactions --create-duration --create-statistical --select-features-flag --feature-selection-method combined --n-features 15
+
+python -m src.modeling.train --n-folds 2 --exp-name test_run

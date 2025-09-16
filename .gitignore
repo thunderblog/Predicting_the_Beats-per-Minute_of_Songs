@@ -1,6 +1,15 @@
 # Data
 /data/
 
+# Models and ML artifacts
+/models/
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.pth
+
 # Mac OS-specific storage files
 .DS_Store
 
