@@ -376,3 +376,104 @@ experiments/
 2. config.json・results.json・README.mdを作成
 3. submission.csvとmodelファイルをコピー
 4. 次回実験のためのNext Stepsを記録
+
+## 精度向上タスクチケット
+
+### 第6段階: 高度な特徴量エンジニアリング
+8. **[TICKET-008] 音楽ジャンル推定特徴量の作成**
+   - ファイル: `src/features.py` (機能拡張)
+   - 要件:
+     - Energy×RhythmScore → ダンス系ジャンル特徴量
+     - AcousticQuality×InstrumentalScore → アコースティック系特徴量
+     - VocalContent×MoodScore → バラード系特徴量
+     - 各ジャンル特徴量のBPM予測への寄与度分析
+
+9. **[TICKET-009] テンポカテゴリ特徴量の実装**
+   - ファイル: `src/features.py` (機能拡張)
+   - 要件:
+     - BPM範囲による楽曲カテゴリ推定（遅・中・速テンポ）
+     - 各特徴量とテンポカテゴリの関係性分析
+     - テンポ予測用の確率的特徴量作成
+
+10. **[TICKET-010] 音楽的複雑性・時間的特徴量の開発**
+    - ファイル: `src/features.py` (機能拡張)
+    - 要件:
+      - RhythmScore/Energy → リズム複雑性指標
+      - TrackDurationMs ベースの長さカテゴリ特徴量
+      - LivePerformanceLikelihood×Energy → パフォーマンス特徴量
+      - 楽曲構造推定特徴量（イントロ・サビ・アウトロ推定）
+
+### 第7段階: モデル多様化とアンサンブル
+11. **[TICKET-011] 複数アルゴリズムモデルの実装**
+    - 新規ファイル: `src/modeling/models.py`
+    - 要件:
+      - XGBoost、CatBoost、Random Forest実装
+      - ニューラルネットワーク（MLP、TabNet）実装
+      - 各モデルの最適ハイパーパラメータ探索
+
+12. **[TICKET-012] アンサンブル手法の実装**
+    - 新規ファイル: `src/modeling/ensemble.py`
+    - 要件:
+      - 加重平均アンサンブル
+      - スタッキング（2層スタッキング）
+      - ブレンディング手法
+      - アンサンブル重み最適化
+
+### 第8段階: ハイパーパラメータ最適化
+13. **[TICKET-013] Optuna最適化システム実装**
+    - 新規ファイル: `src/modeling/optimization.py`
+    - 要件:
+      - 全モデル対応の統一的最適化フレームワーク
+      - ベイジアン最適化によるハイパーパラメータ探索
+      - 早期停止とトライアル履歴管理
+      - CV性能向上の追跡・可視化
+
+### 第9段階: 高度なクロスバリデーション
+14. **[TICKET-014] CV戦略改善とデータ分析**
+    - ファイル: `src/modeling/train.py` (機能拡張)
+    - 要件:
+      - StratifiedKFold（BPMレンジ別分割）
+      - GroupKFold（楽曲類似性グループ別分割）
+      - TimeSeriesSplit（時系列分割の検討）
+      - CV-LB一貫性分析とリーク検出
+
+### 第10段階: 実験の体系化
+15. **[TICKET-015] 実験管理システムの自動化**
+    - 新規ファイル: `scripts/experiment_manager.py`
+    - 要件:
+      - 実験設定の自動記録（config.json）
+      - 結果の自動集約（results.json）
+      - 実験比較・可視化ダッシュボード
+      - A/Bテスト機能とベンチマーク追跡
+
+## 精度向上タスクチケット（フェーズ2: 多重共線性改善）
+
+### 第11段階: 多重共線性対策と特徴量最適化
+16. **[TICKET-016] 多重共線性除去による特徴量最適化**
+    - ファイル: `src/features.py` (機能拡張)
+    - 現状: TICKET-008で多重共線性問題を発見
+    - 背景:
+      - ジャンル特徴量と元特徴量の高相関確認（ballad_genre_score vs VocalContent: 0.803）
+      - dance_genre_score vs Energy: 0.871の強い相関
+      - RMSE改善が微小（-0.0010）な原因が多重共線性
+    - 要件:
+      - 高相関ペア（>0.7）の元特徴量自動除去機能
+      - ジャンル特徴量優先の特徴量選択ロジック
+      - 相関行列による自動検出・除去システム
+      - Before/After性能比較機能
+
+17. **[TICKET-017] 独立性の高い高次特徴量の開発**
+    - ファイル: `src/features.py` (新規関数追加)
+    - 要件:
+      - 比率ベース特徴量（VocalContent/Energy、AcousticQuality/Loudness）
+      - 対数変換時間特徴量（log(TrackDurationMs) × RhythmScore）
+      - 標準化済み交互作用（Z-score正規化後の積）
+      - 音楽理論ベースの複雑指標（テンポ×音響品質の複合指標）
+
+18. **[TICKET-018] 次元削減とPCA特徴量の実装**
+    - 新規ファイル: `src/features/dimensionality_reduction.py`
+    - 要件:
+      - PCA変換による主成分特徴量作成
+      - ジャンル特徴量群の主成分分析
+      - 元特徴量群の独立成分分析（ICA）
+      - 最適な主成分数の自動選択（分散寄与率）

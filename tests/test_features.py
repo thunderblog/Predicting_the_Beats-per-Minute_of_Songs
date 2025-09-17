@@ -20,6 +20,9 @@ from src.features import (
     create_interaction_features,
     create_duration_features,
     create_statistical_features,
+    create_music_genre_features,
+    analyze_feature_importance,
+    compare_genre_features_to_bpm,
     select_features,
     scale_features,
 )
@@ -255,6 +258,272 @@ class TestCreateStatisticalFeatures:
         assert result.loc[0, "mean_score"] > 0  # 平均も計算される
 
 
+class TestCreateMusicGenreFeatures:
+    """音楽ジャンル推定特徴量作成機能のテスト"""
+
+    def setup_method(self):
+        """テストデータの準備"""
+        self.df = pd.DataFrame({
+            "id": [1, 2, 3, 4],
+            "RhythmScore": [80.0, 40.0, 60.0, 30.0],
+            "Energy": [90.0, 20.0, 50.0, 70.0],
+            "AudioLoudness": [30.0, 25.0, 35.0, 40.0],
+            "VocalContent": [10.0, 80.0, 40.0, 20.0],
+            "AcousticQuality": [20.0, 90.0, 60.0, 50.0],
+            "InstrumentalScore": [30.0, 85.0, 55.0, 45.0],
+            "LivePerformanceLikelihood": [60.0, 20.0, 40.0, 80.0],
+            "MoodScore": [40.0, 90.0, 70.0, 30.0],
+            "BeatsPerMinute": [140, 80, 110, 120]
+        })
+
+    def test_create_music_genre_features_basic(self):
+        """基本的な音楽ジャンル特徴量作成テスト"""
+        result = create_music_genre_features(self.df)
+
+        # 元の特徴量が保持されている
+        assert all(col in result.columns for col in self.df.columns)
+
+        # 新しいジャンル特徴量が追加されている
+        expected_genre_features = [
+            "dance_genre_score",
+            "acoustic_genre_score",
+            "ballad_genre_score",
+            "rock_genre_score",
+            "electronic_genre_score",
+            "ambient_genre_score"
+        ]
+        assert all(feature in result.columns for feature in expected_genre_features)
+
+    def test_create_music_genre_features_calculations(self):
+        """ジャンル特徴量計算の正確性テスト"""
+        result = create_music_genre_features(self.df)
+
+        # ダンス系特徴量: Energy × RhythmScore
+        expected_dance = self.df["Energy"] * self.df["RhythmScore"]
+        pd.testing.assert_series_equal(
+            result["dance_genre_score"],
+            expected_dance,
+            check_names=False
+        )
+
+        # アコースティック系特徴量: AcousticQuality × InstrumentalScore
+        expected_acoustic = self.df["AcousticQuality"] * self.df["InstrumentalScore"]
+        pd.testing.assert_series_equal(
+            result["acoustic_genre_score"],
+            expected_acoustic,
+            check_names=False
+        )
+
+        # バラード系特徴量: VocalContent × MoodScore
+        expected_ballad = self.df["VocalContent"] * self.df["MoodScore"]
+        pd.testing.assert_series_equal(
+            result["ballad_genre_score"],
+            expected_ballad,
+            check_names=False
+        )
+
+        # ロック系特徴量: Energy × LivePerformanceLikelihood
+        expected_rock = self.df["Energy"] * self.df["LivePerformanceLikelihood"]
+        pd.testing.assert_series_equal(
+            result["rock_genre_score"],
+            expected_rock,
+            check_names=False
+        )
+
+    def test_create_music_genre_features_negative_correlation(self):
+        """負の相関特徴量のテスト"""
+        result = create_music_genre_features(self.df)
+
+        # エレクトロニック系: 低ボーカル × 高エネルギー
+        max_vocal = self.df["VocalContent"].max()
+        expected_electronic = (1 - self.df["VocalContent"] / (max_vocal + 1e-8)) * self.df["Energy"]
+        pd.testing.assert_series_equal(
+            result["electronic_genre_score"],
+            expected_electronic,
+            check_names=False
+        )
+
+        # アンビエント系: 低エネルギー × 高音響品質
+        max_energy = self.df["Energy"].max()
+        expected_ambient = (1 - self.df["Energy"] / (max_energy + 1e-8)) * self.df["AcousticQuality"]
+        pd.testing.assert_series_equal(
+            result["ambient_genre_score"],
+            expected_ambient,
+            check_names=False
+        )
+
+    def test_create_music_genre_features_edge_cases(self):
+        """境界値・特殊ケースのテスト"""
+        # 全ての値が0のケース
+        edge_df = pd.DataFrame({
+            "id": [1, 2],
+            "RhythmScore": [0.0, 100.0],
+            "Energy": [0.0, 100.0],
+            "VocalContent": [0.0, 100.0],
+            "AcousticQuality": [0.0, 100.0],
+            "InstrumentalScore": [0.0, 100.0],
+            "LivePerformanceLikelihood": [0.0, 100.0],
+            "MoodScore": [0.0, 100.0],
+            "BeatsPerMinute": [60, 180]
+        })
+
+        result = create_music_genre_features(edge_df)
+
+        # 0の場合は0、最大値の場合は最大値になる
+        assert result.loc[0, "dance_genre_score"] == 0.0  # 0 * 0
+        assert result.loc[1, "dance_genre_score"] == 10000.0  # 100 * 100
+
+        # ゼロ除算対策の確認
+        assert np.isfinite(result["electronic_genre_score"]).all()
+        assert np.isfinite(result["ambient_genre_score"]).all()
+
+    def test_create_music_genre_features_empty_df(self):
+        """空のデータフレームでのテスト"""
+        empty_df = pd.DataFrame(columns=self.df.columns)
+        result = create_music_genre_features(empty_df)
+
+        # ジャンル特徴量が追加されているが、行数は0
+        assert len(result) == 0
+        assert "dance_genre_score" in result.columns
+        assert "acoustic_genre_score" in result.columns
+
+
+class TestAnalyzeFeatureImportance:
+    """特徴量重要度分析機能のテスト"""
+
+    def setup_method(self):
+        """テストデータの準備"""
+        np.random.seed(42)
+        self.X = pd.DataFrame({
+            "dance_genre_score": np.random.uniform(0, 100, 50),
+            "acoustic_genre_score": np.random.uniform(0, 100, 50),
+            "ballad_genre_score": np.random.uniform(0, 100, 50),
+            "rhythm_energy_product": np.random.uniform(0, 100, 50),
+            "duration_seconds": np.random.uniform(120, 300, 50),
+            "total_score": np.random.uniform(200, 800, 50),
+            "other_feature": np.random.uniform(0, 100, 50)
+        })
+        # ターゲットとの相関を作成
+        self.y = (
+            self.X["dance_genre_score"] * 0.5 +
+            self.X["acoustic_genre_score"] * 0.3 +
+            np.random.randn(50) * 10
+        )
+
+    def test_analyze_feature_importance_all(self):
+        """全特徴量重要度分析テスト"""
+        importance_df = analyze_feature_importance(self.X, self.y, "all")
+
+        # 結果の基本構造確認
+        assert len(importance_df) == len(self.X.columns)
+        expected_columns = [
+            "feature_name", "correlation", "f_score", "mutual_info", "rf_importance",
+            "correlation_normalized", "f_score_normalized", "mutual_info_normalized",
+            "rf_importance_normalized", "average_importance"
+        ]
+        assert all(col in importance_df.columns for col in expected_columns)
+
+        # 重要度順にソートされている
+        assert importance_df["average_importance"].is_monotonic_decreasing
+
+        # 正規化値が0-1の範囲内
+        for col in ["correlation_normalized", "f_score_normalized", "mutual_info_normalized", "rf_importance_normalized"]:
+            assert importance_df[col].min() >= 0
+            assert importance_df[col].max() <= 1
+
+    def test_analyze_feature_importance_genre_category(self):
+        """ジャンル特徴量カテゴリ分析テスト"""
+        importance_df = analyze_feature_importance(self.X, self.y, "genre")
+
+        # ジャンル特徴量のみが選択されている
+        genre_features = [col for col in self.X.columns if "genre_score" in col]
+        assert len(importance_df) == len(genre_features)
+        assert all(feature in genre_features for feature in importance_df["feature_name"])
+
+    def test_analyze_feature_importance_empty_category(self):
+        """存在しないカテゴリでのテスト"""
+        importance_df = analyze_feature_importance(self.X, self.y, "nonexistent")
+
+        # 空のDataFrameが返される
+        assert len(importance_df) == 0
+
+
+class TestCompareGenreFeaturesToBpm:
+    """ジャンル特徴量とBPM関係分析機能のテスト"""
+
+    def setup_method(self):
+        """テストデータの準備"""
+        np.random.seed(42)
+        # ジャンル特徴量とBPMに明確な関係を作成
+        self.X = pd.DataFrame({
+            "dance_genre_score": [10, 20, 80, 90, 50, 60, 30, 40, 70, 75],
+            "acoustic_genre_score": [90, 80, 20, 10, 60, 50, 70, 65, 30, 25],
+            "ballad_genre_score": [85, 75, 15, 25, 55, 45, 65, 70, 35, 30],
+            "other_feature": np.random.uniform(0, 100, 10)
+        })
+        # ダンス系は高BPM、アコースティック系は低BPMに設定
+        self.y = pd.Series([
+            70, 75, 140, 150, 110, 115, 90, 95, 130, 135  # BPM values
+        ])
+
+    def test_compare_genre_features_to_bpm_basic(self):
+        """基本的なジャンル特徴量とBPM関係分析テスト"""
+        analysis_df = compare_genre_features_to_bpm(self.X, self.y)
+
+        # ジャンル特徴量のみが分析されている
+        genre_features = [col for col in self.X.columns if "genre_score" in col]
+        assert len(analysis_df) == len(genre_features)
+        assert all(feature in genre_features for feature in analysis_df["genre_feature"])
+
+        # 必要な列が含まれている
+        expected_columns = [
+            "genre_feature", "high_group_mean_bpm", "high_group_std_bpm", "high_group_count",
+            "mid_group_mean_bpm", "mid_group_std_bpm", "mid_group_count",
+            "low_group_mean_bpm", "low_group_std_bpm", "low_group_count",
+            "bpm_range", "correlation_with_bpm"
+        ]
+        assert all(col in analysis_df.columns for col in expected_columns)
+
+        # グループごとのカウントが妥当
+        for _, row in analysis_df.iterrows():
+            total_count = row["high_group_count"] + row["mid_group_count"] + row["low_group_count"]
+            assert total_count == len(self.y)
+
+    def test_compare_genre_features_to_bpm_relationships(self):
+        """ジャンル特徴量とBPMの関係性テスト"""
+        analysis_df = compare_genre_features_to_bpm(self.X, self.y)
+
+        # dance_genre_scoreは正の相関（高い値で高BPM）
+        dance_row = analysis_df[analysis_df["genre_feature"] == "dance_genre_score"].iloc[0]
+        assert dance_row["high_group_mean_bpm"] > dance_row["low_group_mean_bpm"]
+        assert dance_row["correlation_with_bpm"] > 0
+
+        # acoustic_genre_scoreは負の相関（高い値で低BPM）
+        acoustic_row = analysis_df[analysis_df["genre_feature"] == "acoustic_genre_score"].iloc[0]
+        assert acoustic_row["high_group_mean_bpm"] < acoustic_row["low_group_mean_bpm"]
+        assert acoustic_row["correlation_with_bpm"] < 0
+
+    def test_compare_genre_features_to_bpm_no_genre_features(self):
+        """ジャンル特徴量がない場合のテスト"""
+        X_no_genre = pd.DataFrame({
+            "other_feature_1": np.random.uniform(0, 100, 10),
+            "other_feature_2": np.random.uniform(0, 100, 10)
+        })
+
+        analysis_df = compare_genre_features_to_bpm(X_no_genre, self.y)
+
+        # 空のDataFrameが返される
+        assert len(analysis_df) == 0
+
+    def test_compare_genre_features_to_bpm_sorting(self):
+        """BPM範囲による結果ソートのテスト"""
+        analysis_df = compare_genre_features_to_bpm(self.X, self.y)
+
+        # bpm_rangeの絶対値で降順ソートされている
+        bpm_ranges = analysis_df["bpm_range"].abs()
+        assert bpm_ranges.is_monotonic_decreasing
+
+
 class TestSelectFeatures:
     """特徴量選択機能のテスト"""
 
@@ -463,10 +732,21 @@ def test_integration_feature_engineering_pipeline(sample_audio_data):
     statistical_features = create_statistical_features(duration_features)
     assert statistical_features.shape[1] > duration_features.shape[1]
 
+    # 音楽ジャンル特徴量作成
+    genre_features = create_music_genre_features(statistical_features)
+    assert genre_features.shape[1] > statistical_features.shape[1]
+
+    # ジャンル特徴量が正しく追加されている
+    expected_genre_features = [
+        "dance_genre_score", "acoustic_genre_score", "ballad_genre_score",
+        "rock_genre_score", "electronic_genre_score", "ambient_genre_score"
+    ]
+    assert all(feature in genre_features.columns for feature in expected_genre_features)
+
     # 特徴量行列の準備
-    feature_cols = [col for col in statistical_features.columns if col not in ["id", "BeatsPerMinute"]]
-    X = statistical_features[feature_cols]
-    y = statistical_features["BeatsPerMinute"]
+    feature_cols = [col for col in genre_features.columns if col not in ["id", "BeatsPerMinute"]]
+    X = genre_features[feature_cols]
+    y = genre_features["BeatsPerMinute"]
 
     # 特徴量選択
     X_selected, _ = select_features(X, y, method="kbest", k=10)

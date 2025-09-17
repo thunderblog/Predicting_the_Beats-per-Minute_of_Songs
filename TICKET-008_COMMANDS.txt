@@ -1,0 +1,25 @@
+# TICKET-008: 音楽ジャンル推定特徴量 - コマンドライン指示
+
+## 1. 特徴量生成（ジャンル特徴量を含む拡張データセット作成）
+python -m src.features --create-genre --output-dir=data/processed
+
+## 2. モデル訓練（拡張特徴量使用）
+python -m src.modeling.train --train-path=data/processed/train_features.csv --validation-path=data/processed/validation_features.csv --experiment-name=genre_features_lgb
+
+## 3. 予測実行（テストデータ）
+python -m src.modeling.predict --test-path=data/processed/test_features.csv --model-dir=models --experiment-name=genre_features_lgb --output-path=data/processed/submission_genre_features.csv
+
+## 4. 性能評価（ベースライン比較）
+python scripts/evaluate_genre_features.py
+
+## 5. クイック評価（軽量版）
+python scripts/quick_evaluation.py
+
+## 実行順序
+1 → 2 → 3 (予測まで)
+1 → 4 または 5 (評価のみ)
+
+## 生成ファイル確認
+ls data/processed/train_features.csv
+ls data/processed/submission_genre_features.csv
+ls models/*genre_features_lgb*

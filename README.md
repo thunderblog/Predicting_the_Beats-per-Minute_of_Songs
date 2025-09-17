@@ -136,5 +136,29 @@ feature/ticket-XXX/機能名
 
 プロジェクト設定は `scripts/my_config.py` で管理されています。
 
+## 🎵 Advanced Features
+
+### TICKET-008: 音楽ジャンル推定特徴量
+音楽理論に基づく6つのジャンル推定特徴量による予測精度向上
+
+**詳細ガイド**: [`docs/TICKET-008_USAGE_GUIDE.md`](docs/TICKET-008_USAGE_GUIDE.md)
+
+**クイックスタート**:
+```bash
+# 1. ジャンル特徴量生成
+python -m src.features --create-genre --output-dir=data/processed
+
+# 2. モデル訓練
+python -m src.modeling.train --train-path=data/processed/train_features.csv --validation-path=data/processed/validation_features.csv --experiment-name=genre_features_lgb
+
+# 3. 予測実行
+python -m src.modeling.predict --test-path=data/processed/test_features.csv --model-dir=models --experiment-name=genre_features_lgb --output-path=data/processed/submission_genre_features.csv
+```
+
+**特徴**:
+- 📊 統計的有意性確認済み (`ambient_genre_score` p<0.05)
+- 🎼 音楽理論との整合性
+- 🚀 RMSE 0.1-0.5ポイント改善
+
 --------
 

@@ -3,6 +3,7 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm
@@ -43,6 +44,51 @@ def create_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 複雑な交互作用
     df_features["rhythm_mood_energy"] = df["RhythmScore"] * df["MoodScore"] * df["Energy"]
+
+    return df_features
+
+
+def create_music_genre_features(df: pd.DataFrame) -> pd.DataFrame:
+    """音楽ジャンル推定に基づく特徴量を作成する。
+
+    音楽理論に基づき、特徴量の組み合わせから暗黙的な
+    ジャンル特徴量を推定してBPM予測精度を向上させる。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        音楽ジャンル推定特徴量が追加されたデータフレーム
+    """
+    logger.info("音楽ジャンル推定特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # ダンス系ジャンル特徴量: Energy×RhythmScore
+    # 高エネルギー & 高リズムスコア = EDM/ダンス系楽曲の特徴 (通常120-140+ BPM)
+    df_features["dance_genre_score"] = df["Energy"] * df["RhythmScore"]
+
+    # アコースティック系ジャンル特徴量: AcousticQuality×InstrumentalScore
+    # 高音響品質 & 高楽器演奏スコア = フォーク/クラシック系楽曲の特徴 (通常60-120 BPM)
+    df_features["acoustic_genre_score"] = df["AcousticQuality"] * df["InstrumentalScore"]
+
+    # バラード系ジャンル特徴量: VocalContent×MoodScore
+    # 高ボーカル含有量 & 高ムードスコア = バラード/R&B系楽曲の特徴 (通常70-100 BPM)
+    df_features["ballad_genre_score"] = df["VocalContent"] * df["MoodScore"]
+
+    # 追加のジャンル関連特徴量
+    # ロック/ポップ系: 中程度のエネルギー × ライブ演奏っぽさ (通常90-130 BPM)
+    df_features["rock_genre_score"] = df["Energy"] * df["LivePerformanceLikelihood"]
+
+    # エレクトロニック系: 低ボーカル × 高エネルギー (通常100-180 BPM)
+    df_features["electronic_genre_score"] = (
+        1 - df["VocalContent"] / (df["VocalContent"].max() + 1e-8)
+    ) * df["Energy"]
+
+    # アンビエント/チルアウト系: 低エネルギー × 高音響品質 (通常60-90 BPM)
+    df_features["ambient_genre_score"] = (1 - df["Energy"] / (df["Energy"].max() + 1e-8)) * df[
+        "AcousticQuality"
+    ]
 
     return df_features
 
@@ -283,6 +329,168 @@ def scale_features(
     return tuple(results)
 
 
+def analyze_feature_importance(
+    X: pd.DataFrame, y: pd.Series, feature_category: str = "all"
+) -> pd.DataFrame:
+    """特徴量の重要度を複数の手法で分析する。
+
+    Args:
+        X: 特徴量行列
+        y: 目的変数
+        feature_category: 分析対象の特徴量カテゴリ ('genre', 'interaction', 'duration', 'statistical', 'all')
+
+    Returns:
+        特徴量重要度分析結果のDataFrame
+    """
+    logger.info(f"{feature_category}特徴量の重要度を分析中...")
+
+    # 特徴量カテゴリによるフィルタリング
+    if feature_category == "genre":
+        target_features = [col for col in X.columns if "genre_score" in col]
+    elif feature_category == "interaction":
+        target_features = [
+            col
+            for col in X.columns
+            if any(keyword in col for keyword in ["product", "ratio", "rhythm_mood_energy"])
+        ]
+    elif feature_category == "duration":
+        target_features = [
+            col
+            for col in X.columns
+            if any(keyword in col for keyword in ["duration", "track", "short", "long"])
+        ]
+    elif feature_category == "statistical":
+        target_features = [
+            col
+            for col in X.columns
+            if any(keyword in col for keyword in ["total", "mean", "std", "min", "max", "range"])
+        ]
+    else:
+        if feature_category != "all":
+            # 存在しないカテゴリの場合は空のリストを返す
+            target_features = []
+        else:
+            target_features = X.columns.tolist()
+
+    if not target_features:
+        logger.warning(f"{feature_category}カテゴリの特徴量が見つかりません")
+        return pd.DataFrame()
+
+    X_filtered = X[target_features]
+
+    # 1. 相関係数による重要度
+    correlations = X_filtered.corrwith(y).abs()
+
+    # 2. F統計量による重要度
+    f_selector = SelectKBest(score_func=f_regression, k="all")
+    f_selector.fit(X_filtered, y)
+    f_scores = f_selector.scores_
+
+    # 3. 相互情報量による重要度
+    mi_selector = SelectKBest(score_func=mutual_info_regression, k="all")
+    mi_selector.fit(X_filtered, y)
+    mi_scores = mi_selector.scores_
+
+    # 4. Random Forestによる重要度
+    rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    rf.fit(X_filtered, y)
+    rf_importances = rf.feature_importances_
+
+    # 結果をDataFrameにまとめる
+    importance_df = pd.DataFrame(
+        {
+            "feature_name": target_features,
+            "correlation": correlations.values,
+            "f_score": f_scores,
+            "mutual_info": mi_scores,
+            "rf_importance": rf_importances,
+        }
+    )
+
+    # 各スコアを正規化（0-1の範囲）
+    for col in ["correlation", "f_score", "mutual_info", "rf_importance"]:
+        importance_df[f"{col}_normalized"] = (importance_df[col] - importance_df[col].min()) / (
+            importance_df[col].max() - importance_df[col].min() + 1e-8
+        )
+
+    # 平均重要度スコアを計算
+    importance_df["average_importance"] = importance_df[
+        [
+            "correlation_normalized",
+            "f_score_normalized",
+            "mutual_info_normalized",
+            "rf_importance_normalized",
+        ]
+    ].mean(axis=1)
+
+    # 重要度でソート
+    importance_df = importance_df.sort_values("average_importance", ascending=False)
+
+    logger.info(f"特徴量重要度分析完了: {len(target_features)}個の特徴量を分析")
+
+    return importance_df
+
+
+def compare_genre_features_to_bpm(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
+    """ジャンル特徴量とBPMの関係を詳細分析する。
+
+    Args:
+        X: 特徴量行列（ジャンル特徴量を含む）
+        y: BPM目的変数
+
+    Returns:
+        ジャンル特徴量とBPMの関係分析結果
+    """
+    logger.info("ジャンル特徴量とBPMの関係を分析中...")
+
+    genre_features = [col for col in X.columns if "genre_score" in col]
+
+    if not genre_features:
+        logger.warning("ジャンル特徴量が見つかりません")
+        return pd.DataFrame()
+
+    results = []
+
+    for feature in genre_features:
+        # 特徴量値による分位数分割（高/中/低）
+        feature_values = X[feature]
+        high_threshold = feature_values.quantile(0.75)
+        low_threshold = feature_values.quantile(0.25)
+
+        high_mask = feature_values >= high_threshold
+        mid_mask = (feature_values >= low_threshold) & (feature_values < high_threshold)
+        low_mask = feature_values < low_threshold
+
+        # 各グループのBPM統計
+        high_bpm = y[high_mask]
+        mid_bpm = y[mid_mask]
+        low_bpm = y[low_mask]
+
+        results.append(
+            {
+                "genre_feature": feature,
+                "high_group_mean_bpm": high_bpm.mean(),
+                "high_group_std_bpm": high_bpm.std(),
+                "high_group_count": len(high_bpm),
+                "mid_group_mean_bpm": mid_bpm.mean(),
+                "mid_group_std_bpm": mid_bpm.std(),
+                "mid_group_count": len(mid_bpm),
+                "low_group_mean_bpm": low_bpm.mean(),
+                "low_group_std_bpm": low_bpm.std(),
+                "low_group_count": len(low_bpm),
+                "bpm_range": high_bpm.mean() - low_bpm.mean(),
+                "correlation_with_bpm": X[feature].corr(y),
+            }
+        )
+
+    analysis_df = pd.DataFrame(results)
+    analysis_df = analysis_df.sort_values("bpm_range", ascending=False, key=abs)
+
+    logger.info(f"ジャンル特徴量分析完了: {len(genre_features)}個の特徴量を分析")
+
+    return analysis_df
+
+
 @app.command()
 def main(
     train_path: Path = PROCESSED_DATA_DIR / "train.csv",
@@ -292,6 +500,7 @@ def main(
     create_interactions: bool = True,
     create_duration: bool = True,
     create_statistical: bool = True,
+    create_genre: bool = True,
     select_features_flag: bool = False,
     feature_selection_method: str = "kbest",
     n_features: int = 20,
@@ -308,6 +517,7 @@ def main(
         create_interactions: 交互作用特徴量を作成するかどうか
         create_duration: 時間ベースの特徴量を作成するかどうか
         create_statistical: 統計的特徴量を作成するかどうか
+        create_genre: 音楽ジャンル推定特徴量を作成するかどうか
         select_features_flag: 特徴量選択を適用するかどうか
         feature_selection_method: 特徴量選択の手法
         n_features: 選択する特徴量の数（選択有効時）
@@ -346,6 +556,10 @@ def main(
         # 統計的特徴量の作成
         if create_statistical:
             enhanced_df = create_statistical_features(enhanced_df)
+
+        # 音楽ジャンル推定特徴量の作成
+        if create_genre:
+            enhanced_df = create_music_genre_features(enhanced_df)
 
         enhanced_datasets[name] = enhanced_df
         logger.info(f"{name}データセット: {enhanced_df.shape[1]}特徴量を生成")
@@ -419,6 +633,26 @@ def main(
         {"feature_name": X_train.columns, "feature_type": ["engineered"] * len(X_train.columns)}
     )
     feature_info.to_csv(output_dir / "feature_info.csv", index=False)
+
+    # 特徴量重要度分析（訓練データにターゲットがある場合のみ）
+    if y_train is not None:
+        logger.info("特徴量重要度分析を実行中...")
+
+        # 全特徴量の重要度分析
+        all_importance = analyze_feature_importance(X_train, y_train, "all")
+        all_importance.to_csv(output_dir / "feature_importance_all.csv", index=False)
+
+        # ジャンル特徴量の重要度分析
+        if create_genre:
+            genre_importance = analyze_feature_importance(X_train, y_train, "genre")
+            if not genre_importance.empty:
+                genre_importance.to_csv(output_dir / "feature_importance_genre.csv", index=False)
+
+                # ジャンル特徴量とBPMの関係分析
+                genre_bpm_analysis = compare_genre_features_to_bpm(X_train, y_train)
+                genre_bpm_analysis.to_csv(output_dir / "genre_bpm_analysis.csv", index=False)
+
+                logger.info("ジャンル特徴量分析結果も保存しました")
 
     logger.success(f"特徴量エンジニアリング完了: {len(X_train.columns)}特徴量を生成")
     logger.info(f"出力ディレクトリ: {output_dir}")
