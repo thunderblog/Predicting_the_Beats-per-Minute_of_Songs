@@ -1,0 +1,43 @@
+TICKET-008-01: 多重共線性除去機能 - コマンド一覧
+
+=== 基本実行 ===
+python -m src.features --create-genre --remove-multicollinearity --output-dir=data/processed
+
+=== 閾値調整 ===
+# 厳格（高相関のみ）
+python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold=0.8
+
+# 積極的（軽量化重視）
+python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold=0.6
+
+# ジャンル優先なし
+python -m src.features --create-genre --remove-multicollinearity --no-prioritize-genre-features
+
+=== 完全パイプライン ===
+# 1. 多重共線性除去付き特徴量生成
+python -m src.features --create-genre --remove-multicollinearity --output-dir=data/processed
+
+# 2. 最適化データで訓練
+python -m src.modeling.train --train-path=data/processed/train_features.csv --validation-path=data/processed/validation_features.csv --experiment-name=optimized_lgb
+
+# 3. 予測実行
+python -m src.modeling.predict --test-path=data/processed/test_features.csv --model-dir=models --experiment-name=optimized_lgb --output-path=data/processed/submission_optimized.csv
+
+=== 結果確認 ===
+# 除去された特徴量確認
+cat data/processed/multicollinearity_removal_info.csv
+
+# 性能改善確認
+cat data/processed/multicollinearity_impact_results.json
+
+# 高相関ペア確認
+cat data/processed/high_correlation_pairs.csv
+
+=== データ確認 ===
+python -c "
+import pandas as pd
+df = pd.read_csv('data/processed/train_features.csv')
+print(f'最適化後データ形状: {df.shape}')
+removed_features = pd.read_csv('data/processed/multicollinearity_removal_info.csv')
+print(f'除去特徴量数: {len(removed_features)}')
+"

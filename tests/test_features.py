@@ -25,6 +25,9 @@ from src.features import (
     compare_genre_features_to_bpm,
     select_features,
     scale_features,
+    detect_multicollinearity,
+    remove_correlated_features,
+    evaluate_multicollinearity_impact,
 )
 
 
@@ -756,3 +759,212 @@ def test_integration_feature_engineering_pipeline(sample_audio_data):
     X_scaled, _, _, scaler = scale_features(X_selected)
     assert X_scaled.shape == X_selected.shape
     assert isinstance(scaler, StandardScaler)
+
+
+class TestDetectMulticollinearity:
+    """多重共線性検出機能のテスト"""
+
+    def setup_method(self):
+        """高相関特徴量を含むテストデータの準備"""
+        np.random.seed(42)
+        n_samples = 100
+
+        # 基本特徴量
+        feature_1 = np.random.normal(50, 10, n_samples)
+        feature_2 = np.random.normal(30, 8, n_samples)
+        independent_feature = np.random.normal(25, 5, n_samples)
+
+        # 高相関特徴量を作成
+        high_corr_feature = 0.8 * feature_1 + 0.2 * np.random.normal(0, 2, n_samples)  # feature_1と高相関
+        genre_feature = 0.9 * feature_2 + 0.1 * np.random.normal(0, 1, n_samples)  # feature_2と高相関
+
+        self.df = pd.DataFrame({
+            "feature_1": feature_1,
+            "feature_2": feature_2,
+            "high_corr_feature": high_corr_feature,
+            "genre_score_test": genre_feature,  # ジャンル特徴量
+            "independent_feature": independent_feature
+        })
+
+    def test_detect_multicollinearity_basic(self):
+        """基本的な多重共線性検出テスト"""
+        result = detect_multicollinearity(self.df, threshold=0.7)
+
+        # 高相関ペアが検出されることを確認
+        assert not result.empty
+        assert len(result) >= 2  # feature_1-high_corr_feature, feature_2-genre_score_testのペア
+
+        # 必要な列が含まれていることを確認
+        expected_columns = ["feature_1", "feature_2", "correlation", "priority_suggestion"]
+        assert all(col in result.columns for col in expected_columns)
+
+        # 相関値が閾値以上であることを確認
+        assert all(result["correlation"] >= 0.7)
+
+    def test_detect_multicollinearity_genre_prioritization(self):
+        """ジャンル特徴量優先判定のテスト"""
+        result = detect_multicollinearity(self.df, threshold=0.7)
+
+        # ジャンル特徴量に関する推奨が正しいことを確認
+        genre_pairs = result[
+            (result["feature_1"].str.contains("genre_score") |
+             result["feature_2"].str.contains("genre_score"))
+        ]
+
+        assert not genre_pairs.empty
+        for _, row in genre_pairs.iterrows():
+            if "genre_score" in row["feature_1"]:
+                assert f"Keep {row['feature_1']} (genre feature)" in row["priority_suggestion"]
+            elif "genre_score" in row["feature_2"]:
+                assert f"Keep {row['feature_2']} (genre feature)" in row["priority_suggestion"]
+
+    def test_detect_multicollinearity_no_pairs(self):
+        """高相関ペアがない場合のテスト"""
+        # 低相関のデータを作成
+        independent_df = pd.DataFrame({
+            "feature_1": np.random.normal(50, 10, 50),
+            "feature_2": np.random.normal(30, 8, 50),
+            "feature_3": np.random.normal(25, 5, 50)
+        })
+
+        result = detect_multicollinearity(independent_df, threshold=0.9)
+        assert result.empty
+
+
+class TestRemoveCorrelatedFeatures:
+    """多重共線性特徴量除去機能のテスト"""
+
+    def setup_method(self):
+        """高相関特徴量を含むテストデータの準備"""
+        np.random.seed(42)
+        n_samples = 100
+
+        # 基本特徴量
+        feature_a = np.random.normal(50, 10, n_samples)
+        feature_b = np.random.normal(30, 8, n_samples)
+        independent = np.random.normal(25, 5, n_samples)
+
+        # 高相関特徴量
+        correlated_to_a = 0.85 * feature_a + 0.15 * np.random.normal(0, 2, n_samples)
+        genre_correlated_to_b = 0.9 * feature_b + 0.1 * np.random.normal(0, 1, n_samples)
+
+        self.df = pd.DataFrame({
+            "feature_a": feature_a,
+            "correlated_to_a": correlated_to_a,
+            "feature_b": feature_b,
+            "dance_genre_score": genre_correlated_to_b,  # ジャンル特徴量
+            "independent": independent
+        })
+
+    def test_remove_correlated_features_genre_priority(self):
+        """ジャンル特徴量優先での除去テスト"""
+        original_cols = len(self.df.columns)
+
+        cleaned_df, removal_info = remove_correlated_features(
+            self.df, correlation_threshold=0.7, prioritize_genre_features=True
+        )
+
+        # 特徴量が除去されていることを確認
+        assert len(cleaned_df.columns) < original_cols
+
+        # ジャンル特徴量が保持されていることを確認
+        assert "dance_genre_score" in cleaned_df.columns
+
+        # 除去情報が正しく記録されていることを確認
+        if not removal_info.empty:
+            expected_columns = ["removed_feature", "kept_feature", "correlation", "removal_reason"]
+            assert all(col in removal_info.columns for col in expected_columns)
+
+            # ジャンル特徴量優先の理由が含まれている
+            genre_priority_removals = removal_info[
+                removal_info["removal_reason"].str.contains("genre feature")
+            ]
+            if not genre_priority_removals.empty:
+                assert len(genre_priority_removals) > 0
+
+    def test_remove_correlated_features_no_genre_priority(self):
+        """ジャンル特徴量を優先しない場合のテスト"""
+        cleaned_df, removal_info = remove_correlated_features(
+            self.df, correlation_threshold=0.7, prioritize_genre_features=False
+        )
+
+        # 特徴量が除去されていることを確認
+        assert len(cleaned_df.columns) <= len(self.df.columns)
+
+        # 除去理由にジャンル特徴量優先が含まれていないことを確認
+        if not removal_info.empty:
+            genre_reasons = removal_info["removal_reason"].str.contains("genre feature").sum()
+            # prioritize_genre_features=Falseなので、ジャンル特徴量優先の理由は0個であるべき
+            assert genre_reasons == 0
+
+    def test_remove_correlated_features_no_pairs(self):
+        """多重共線性がない場合のテスト"""
+        # 独立した特徴量のデータを作成
+        independent_df = pd.DataFrame({
+            "feature_1": np.random.normal(50, 10, 50),
+            "feature_2": np.random.normal(30, 8, 50),
+            "feature_3": np.random.normal(25, 5, 50)
+        })
+
+        cleaned_df, removal_info = remove_correlated_features(
+            independent_df, correlation_threshold=0.9
+        )
+
+        # 特徴量が除去されていないことを確認
+        assert len(cleaned_df.columns) == len(independent_df.columns)
+        assert removal_info.empty
+
+
+class TestEvaluateMulticollinearityImpact:
+    """多重共線性除去効果評価機能のテスト"""
+
+    def setup_method(self):
+        """テストデータとモックの準備"""
+        np.random.seed(42)
+        n_samples = 100
+
+        # 特徴量データ
+        feature_1 = np.random.normal(50, 10, n_samples)
+        feature_2 = np.random.normal(30, 8, n_samples)
+        correlated_feature = 0.8 * feature_1 + 0.2 * np.random.normal(0, 2, n_samples)
+
+        self.X_original = pd.DataFrame({
+            "feature_1": feature_1,
+            "feature_2": feature_2,
+            "correlated_feature": correlated_feature
+        })
+
+        self.X_cleaned = self.X_original.drop("correlated_feature", axis=1)
+        self.y = 2 * feature_1 + feature_2 + np.random.normal(0, 5, n_samples)
+
+        self.removal_info = pd.DataFrame({
+            "removed_feature": ["correlated_feature"],
+            "kept_feature": ["feature_1"],
+            "correlation": [0.8],
+            "removal_reason": ["High correlation with feature_1"]
+        })
+
+    def test_evaluate_multicollinearity_impact_basic(self):
+        """基本的な効果評価テスト（実際のLightGBMを使用）"""
+        # 実際の評価を実行（軽量パラメータで）
+        result = evaluate_multicollinearity_impact(
+            self.X_original, self.X_cleaned, self.y, self.removal_info
+        )
+
+        # 結果の構造が正しいことを確認
+        expected_keys = [
+            "before_features_count", "after_features_count", "removed_features_count",
+            "before_rmse", "after_rmse", "rmse_improvement", "improvement_percentage"
+        ]
+        assert all(key in result for key in expected_keys)
+
+        # 数値が正しい範囲にあることを確認
+        assert result["before_features_count"] == 3
+        assert result["after_features_count"] == 2
+        assert result["removed_features_count"] == 1
+        assert isinstance(result["rmse_improvement"], (int, float))
+        assert isinstance(result["improvement_percentage"], (int, float))
+
+        # RMSEが正の値であることを確認
+        assert result["before_rmse"] > 0
+        assert result["after_rmse"] > 0

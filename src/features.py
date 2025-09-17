@@ -491,6 +491,246 @@ def compare_genre_features_to_bpm(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame
     return analysis_df
 
 
+def detect_multicollinearity(X: pd.DataFrame, threshold: float = 0.7) -> pd.DataFrame:
+    """高相関特徴量ペアを検出して多重共線性を分析する。
+
+    Args:
+        X: 特徴量行列
+        threshold: 相関係数の閾値（この値以上で高相関とみなす）
+
+    Returns:
+        高相関ペア情報のDataFrame（feature_1, feature_2, correlation, priority_suggestion）
+    """
+    logger.info(f"多重共線性検出中（閾値: {threshold}）...")
+
+    # 相関行列を計算
+    corr_matrix = X.corr().abs()
+
+    # 上三角行列から高相関ペアを抽出（対角成分は除外）
+    high_corr_pairs = []
+
+    for i in range(len(corr_matrix.columns)):
+        for j in range(i + 1, len(corr_matrix.columns)):
+            correlation = corr_matrix.iloc[i, j]
+
+            if correlation >= threshold:
+                feature_1 = corr_matrix.columns[i]
+                feature_2 = corr_matrix.columns[j]
+
+                # ジャンル特徴量の優先判定
+                feature_1_is_genre = "genre_score" in feature_1
+                feature_2_is_genre = "genre_score" in feature_2
+
+                # どちらを保持すべきかの推奨を決定
+                if feature_1_is_genre and feature_2_is_genre:
+                    priority_suggestion = "Both genre features - consider combining"
+                elif feature_1_is_genre:
+                    priority_suggestion = f"Keep {feature_1} (genre feature)"
+                elif feature_2_is_genre:
+                    priority_suggestion = f"Keep {feature_2} (genre feature)"
+                else:
+                    priority_suggestion = "No genre feature - manual decision needed"
+
+                high_corr_pairs.append({
+                    "feature_1": feature_1,
+                    "feature_2": feature_2,
+                    "correlation": correlation,
+                    "feature_1_is_genre": feature_1_is_genre,
+                    "feature_2_is_genre": feature_2_is_genre,
+                    "priority_suggestion": priority_suggestion
+                })
+
+    if not high_corr_pairs:
+        logger.info("高相関特徴量ペアは検出されませんでした")
+        return pd.DataFrame()
+
+    pairs_df = pd.DataFrame(high_corr_pairs)
+    pairs_df = pairs_df.sort_values("correlation", ascending=False)
+
+    logger.info(f"高相関ペア検出完了: {len(pairs_df)}組のペアを発見")
+
+    return pairs_df
+
+
+def remove_correlated_features(
+    X: pd.DataFrame,
+    correlation_threshold: float = 0.7,
+    prioritize_genre_features: bool = True
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """多重共線性のある特徴量を除去する。
+
+    Args:
+        X: 特徴量行列
+        correlation_threshold: 相関係数の閾値
+        prioritize_genre_features: ジャンル特徴量を優先して保持するかどうか
+
+    Returns:
+        (cleaned_X, removed_features_info)のタプル
+        - cleaned_X: 多重共線性除去後の特徴量行列
+        - removed_features_info: 除去された特徴量の情報
+    """
+    logger.info("多重共線性除去処理を開始...")
+
+    # 高相関ペアを検出
+    high_corr_pairs = detect_multicollinearity(X, correlation_threshold)
+
+    if high_corr_pairs.empty:
+        logger.info("除去すべき高相関特徴量は見つかりませんでした")
+        return X, pd.DataFrame()
+
+    # 除去する特徴量のリスト
+    features_to_remove = set()
+    removal_info = []
+
+    for _, row in high_corr_pairs.iterrows():
+        feature_1 = row["feature_1"]
+        feature_2 = row["feature_2"]
+        correlation = row["correlation"]
+
+        # 既に除去対象となった特徴量はスキップ
+        if feature_1 in features_to_remove or feature_2 in features_to_remove:
+            continue
+
+        # 除去する特徴量を決定
+        if prioritize_genre_features:
+            if row["feature_1_is_genre"] and not row["feature_2_is_genre"]:
+                # feature_1がジャンル特徴量、feature_2が非ジャンル特徴量
+                remove_feature = feature_2
+                keep_feature = feature_1
+                reason = "Non-genre feature removed in favor of genre feature"
+            elif row["feature_2_is_genre"] and not row["feature_1_is_genre"]:
+                # feature_2がジャンル特徴量、feature_1が非ジャンル特徴量
+                remove_feature = feature_1
+                keep_feature = feature_2
+                reason = "Non-genre feature removed in favor of genre feature"
+            elif row["feature_1_is_genre"] and row["feature_2_is_genre"]:
+                # 両方がジャンル特徴量の場合は辞書順で後のものを除去
+                if feature_1 < feature_2:
+                    remove_feature = feature_2
+                    keep_feature = feature_1
+                else:
+                    remove_feature = feature_1
+                    keep_feature = feature_2
+                reason = "Lexicographically later genre feature removed"
+            else:
+                # 両方とも非ジャンル特徴量の場合は辞書順で後のものを除去
+                if feature_1 < feature_2:
+                    remove_feature = feature_2
+                    keep_feature = feature_1
+                else:
+                    remove_feature = feature_1
+                    keep_feature = feature_2
+                reason = "Lexicographically later non-genre feature removed"
+        else:
+            # ジャンル特徴量を優先しない場合は辞書順で決定
+            if feature_1 < feature_2:
+                remove_feature = feature_2
+                keep_feature = feature_1
+            else:
+                remove_feature = feature_1
+                keep_feature = feature_2
+            reason = "Lexicographically later feature removed"
+
+        features_to_remove.add(remove_feature)
+        removal_info.append({
+            "removed_feature": remove_feature,
+            "kept_feature": keep_feature,
+            "correlation": correlation,
+            "removal_reason": reason
+        })
+
+    # 特徴量を除去
+    cleaned_X = X.drop(columns=list(features_to_remove))
+    removal_df = pd.DataFrame(removal_info)
+
+    logger.info(f"多重共線性除去完了: {len(features_to_remove)}個の特徴量を除去")
+    logger.info(f"残存特徴量数: {len(cleaned_X.columns)} (元: {len(X.columns)})")
+
+    return cleaned_X, removal_df
+
+
+def evaluate_multicollinearity_impact(
+    X_original: pd.DataFrame,
+    X_cleaned: pd.DataFrame,
+    y: pd.Series,
+    removal_info: pd.DataFrame
+) -> dict:
+    """多重共線性除去前後の性能比較を行う。
+
+    Args:
+        X_original: 除去前の特徴量行列
+        X_cleaned: 除去後の特徴量行列
+        y: 目的変数
+        removal_info: 除去された特徴量の情報
+
+    Returns:
+        Before/After比較結果のdict
+    """
+    logger.info("多重共線性除去前後の影響を評価中...")
+
+    from sklearn.model_selection import cross_val_score, KFold
+    from sklearn.metrics import mean_squared_error
+    import lightgbm as lgb
+
+    # クロスバリデーション設定
+    cv_folds = 3  # 軽量化のため3フォールド
+    kfold = KFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    model_params = {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "num_leaves": 31,
+        "learning_rate": 0.1,
+        "n_estimators": 50,  # 軽量化
+        "verbose": -1,
+        "random_state": 42
+    }
+
+    # Before: 除去前の評価
+    logger.info("除去前の性能を評価中...")
+    model_original = lgb.LGBMRegressor(**model_params)
+    cv_scores_original = cross_val_score(
+        model_original, X_original, y, cv=kfold, scoring="neg_root_mean_squared_error", n_jobs=-1
+    )
+    rmse_original = -cv_scores_original.mean()
+    std_original = cv_scores_original.std()
+
+    # After: 除去後の評価
+    logger.info("除去後の性能を評価中...")
+    model_cleaned = lgb.LGBMRegressor(**model_params)
+    cv_scores_cleaned = cross_val_score(
+        model_cleaned, X_cleaned, y, cv=kfold, scoring="neg_root_mean_squared_error", n_jobs=-1
+    )
+    rmse_cleaned = -cv_scores_cleaned.mean()
+    std_cleaned = cv_scores_cleaned.std()
+
+    # 性能比較結果
+    improvement = rmse_original - rmse_cleaned
+    improvement_pct = (improvement / rmse_original) * 100
+
+    comparison_result = {
+        "before_features_count": len(X_original.columns),
+        "after_features_count": len(X_cleaned.columns),
+        "removed_features_count": len(removal_info),
+        "before_rmse": rmse_original,
+        "before_rmse_std": std_original,
+        "after_rmse": rmse_cleaned,
+        "after_rmse_std": std_cleaned,
+        "rmse_improvement": improvement,
+        "improvement_percentage": improvement_pct,
+        "removed_features": removal_info["removed_feature"].tolist() if not removal_info.empty else []
+    }
+
+    # 結果ログ
+    logger.info("=== 多重共線性除去の効果 ===")
+    logger.info(f"除去前RMSE: {rmse_original:.4f} (±{std_original:.4f})")
+    logger.info(f"除去後RMSE: {rmse_cleaned:.4f} (±{std_cleaned:.4f})")
+    logger.info(f"改善: {improvement:.4f} ({improvement_pct:+.2f}%)")
+    logger.info(f"特徴量数: {len(X_original.columns)} → {len(X_cleaned.columns)} (-{len(removal_info)})")
+
+    return comparison_result
+
+
 @app.command()
 def main(
     train_path: Path = PROCESSED_DATA_DIR / "train.csv",
@@ -501,6 +741,9 @@ def main(
     create_duration: bool = True,
     create_statistical: bool = True,
     create_genre: bool = True,
+    remove_multicollinearity: bool = False,
+    multicollinearity_threshold: float = 0.7,
+    prioritize_genre_features: bool = True,
     select_features_flag: bool = False,
     feature_selection_method: str = "kbest",
     n_features: int = 20,
@@ -518,6 +761,9 @@ def main(
         create_duration: 時間ベースの特徴量を作成するかどうか
         create_statistical: 統計的特徴量を作成するかどうか
         create_genre: 音楽ジャンル推定特徴量を作成するかどうか
+        remove_multicollinearity: 多重共線性除去を行うかどうか
+        multicollinearity_threshold: 多重共線性検出の相関閾値
+        prioritize_genre_features: 多重共線性除去時にジャンル特徴量を優先するかどうか
         select_features_flag: 特徴量選択を適用するかどうか
         feature_selection_method: 特徴量選択の手法
         n_features: 選択する特徴量の数（選択有効時）
@@ -587,6 +833,46 @@ def main(
         else None
     )
 
+    # 多重共線性除去処理
+    multicollinearity_results = None
+    if remove_multicollinearity:
+        logger.info(f"多重共線性除去を実行中（閾値: {multicollinearity_threshold}）...")
+
+        # 訓練データで多重共線性を検出・除去
+        X_train_original = X_train.copy()
+        X_train_cleaned, removal_info = remove_correlated_features(
+            X_train,
+            correlation_threshold=multicollinearity_threshold,
+            prioritize_genre_features=prioritize_genre_features
+        )
+
+        # 検証・テストデータにも同じ除去を適用
+        removed_features = removal_info["removed_feature"].tolist() if not removal_info.empty else []
+
+        if X_val is not None:
+            X_val = X_val.drop(columns=[col for col in removed_features if col in X_val.columns])
+        if X_test is not None:
+            X_test = X_test.drop(columns=[col for col in removed_features if col in X_test.columns])
+
+        X_train = X_train_cleaned
+
+        # Before/After性能比較（訓練データに目的変数がある場合のみ）
+        if y_train is not None and not removal_info.empty:
+            multicollinearity_results = evaluate_multicollinearity_impact(
+                X_train_original, X_train_cleaned, y_train, removal_info
+            )
+
+        # 多重共線性除去結果を保存
+        if not removal_info.empty:
+            removal_info.to_csv(output_dir / "multicollinearity_removal_info.csv", index=False)
+
+            # 高相関ペア情報も保存
+            high_corr_pairs = detect_multicollinearity(X_train_original, multicollinearity_threshold)
+            if not high_corr_pairs.empty:
+                high_corr_pairs.to_csv(output_dir / "high_correlation_pairs.csv", index=False)
+
+        logger.info(f"多重共線性除去完了: 最終特徴量数 {len(X_train.columns)}")
+
     # 特徴量選択
     if select_features_flag and y_train is not None:
         X_train, X_val = select_features(
@@ -654,8 +940,23 @@ def main(
 
                 logger.info("ジャンル特徴量分析結果も保存しました")
 
+        # 多重共線性除去結果も保存
+        if multicollinearity_results is not None:
+            import json
+            multicollinearity_file = output_dir / "multicollinearity_impact_results.json"
+            with open(multicollinearity_file, "w", encoding="utf-8") as f:
+                json.dump(multicollinearity_results, f, indent=2, ensure_ascii=False)
+            logger.info(f"多重共線性除去の効果分析結果を保存: {multicollinearity_file}")
+
     logger.success(f"特徴量エンジニアリング完了: {len(X_train.columns)}特徴量を生成")
     logger.info(f"出力ディレクトリ: {output_dir}")
+
+    # 実行結果サマリー
+    if remove_multicollinearity and multicollinearity_results:
+        logger.info("=== 多重共線性除去サマリー ===")
+        logger.info(f"除去された特徴量数: {multicollinearity_results['removed_features_count']}")
+        logger.info(f"性能改善: {multicollinearity_results['rmse_improvement']:+.4f}")
+        logger.info(f"改善率: {multicollinearity_results['improvement_percentage']:+.2f}%")
 
 
 if __name__ == "__main__":
