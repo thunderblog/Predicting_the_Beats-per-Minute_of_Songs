@@ -1,10 +1,10 @@
 from pathlib import Path
 
+from loguru import logger
 import numpy as np
 import pandas as pd
-from loguru import logger
-from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 from tqdm import tqdm
 import typer
 

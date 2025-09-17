@@ -1,17 +1,14 @@
 from pathlib import Path
 import pickle
-import json
-from datetime import datetime
 
-import pandas as pd
-import numpy as np
-from loguru import logger
-from tqdm import tqdm
-import typer
 import lightgbm as lgb
+from loguru import logger
+import numpy as np
+import pandas as pd
+from scripts.my_config import config
+import typer
 
 from src.config import MODELS_DIR, PROCESSED_DATA_DIR
-from scripts.my_config import config
 
 app = typer.Typer()
 
@@ -40,7 +37,7 @@ def load_trained_models(exp_name: str, model_dir: Path) -> list[lgb.Booster]:
 
     for model_file in sorted(model_files):
         logger.info(f"モデルを読み込み中: {model_file.name}")
-        with open(model_file, 'rb') as f:
+        with open(model_file, "rb") as f:
             model = pickle.load(f)
             models.append(model)
 
@@ -48,7 +45,9 @@ def load_trained_models(exp_name: str, model_dir: Path) -> list[lgb.Booster]:
     return models
 
 
-def make_ensemble_predictions(models: list[lgb.Booster], test_data: pd.DataFrame, feature_cols: list) -> np.ndarray:
+def make_ensemble_predictions(
+    models: list[lgb.Booster], test_data: pd.DataFrame, feature_cols: list
+) -> np.ndarray:
     """アンサンブル予測を実行する（複数モデルの平均）。
 
     Args:
@@ -59,7 +58,9 @@ def make_ensemble_predictions(models: list[lgb.Booster], test_data: pd.DataFrame
     Returns:
         np.ndarray: アンサンブル予測値の配列
     """
-    logger.info(f"アンサンブル予測を実行中... (データサイズ: {len(test_data)}, モデル数: {len(models)})")
+    logger.info(
+        f"アンサンブル予測を実行中... (データサイズ: {len(test_data)}, モデル数: {len(models)})"
+    )
 
     # 特徴量データを抽出
     X_test = test_data[feature_cols]
@@ -74,7 +75,9 @@ def make_ensemble_predictions(models: list[lgb.Booster], test_data: pd.DataFrame
     # アンサンブル（平均）
     ensemble_predictions = np.mean(all_predictions, axis=0)
 
-    logger.success(f"アンサンブル予測が完了しました (平均予測値: {ensemble_predictions.mean():.2f})")
+    logger.success(
+        f"アンサンブル予測が完了しました (平均予測値: {ensemble_predictions.mean():.2f})"
+    )
     return ensemble_predictions
 
 
@@ -87,10 +90,7 @@ def save_submission(test_ids: pd.Series, predictions: np.ndarray, output_path: P
         output_path: 出力CSVファイルのパス
     """
     # 提出形式のDataFrameを作成
-    submission_df = pd.DataFrame({
-        'id': test_ids,
-        config.target: predictions
-    })
+    submission_df = pd.DataFrame({"id": test_ids, config.target: predictions})
 
     # CSVファイルとして保存
     output_path.parent.mkdir(exist_ok=True, parents=True)
@@ -98,7 +98,9 @@ def save_submission(test_ids: pd.Series, predictions: np.ndarray, output_path: P
 
     logger.success(f"提出ファイルを保存しました: {output_path}")
     logger.info(f"提出データサイズ: {len(submission_df)} 行")
-    logger.info(f"予測値の統計: 最小={predictions.min():.2f}, 最大={predictions.max():.2f}, 平均={predictions.mean():.2f}")
+    logger.info(
+        f"予測値の統計: 最小={predictions.min():.2f}, 最大={predictions.max():.2f}, 平均={predictions.mean():.2f}"
+    )
 
 
 def process_predictions(predictions: np.ndarray) -> np.ndarray:
@@ -110,7 +112,9 @@ def process_predictions(predictions: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: 後処理済みの予測値配列
     """
-    logger.info(f"予測値の後処理を実行中... (元の範囲: {predictions.min():.2f} - {predictions.max():.2f})")
+    logger.info(
+        f"予測値の後処理を実行中... (元の範囲: {predictions.min():.2f} - {predictions.max():.2f})"
+    )
 
     # BPMの妥当な範囲でクリッピング（一般的に30-300 BPMが現実的）
     processed_predictions = np.clip(predictions, 30, 300)
@@ -120,8 +124,11 @@ def process_predictions(predictions: np.ndarray) -> np.ndarray:
     if clipped_count > 0:
         logger.warning(f"{clipped_count}個の予測値をクリッピングしました")
 
-    logger.info(f"後処理完了 (新しい範囲: {processed_predictions.min():.2f} - {processed_predictions.max():.2f})")
+    logger.info(
+        f"後処理完了 (新しい範囲: {processed_predictions.min():.2f} - {processed_predictions.max():.2f})"
+    )
     return processed_predictions
+
 
 @app.command()
 def main(
@@ -166,7 +173,7 @@ def main(
     processed_predictions = process_predictions(predictions)
 
     # Kaggle提出形式で保存
-    save_submission(test_df['id'], processed_predictions, output_path)
+    save_submission(test_df["id"], processed_predictions, output_path)
 
     logger.success("予測処理が完了しました")
 

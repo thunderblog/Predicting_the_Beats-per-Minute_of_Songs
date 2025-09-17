@@ -5,34 +5,35 @@ KaggleのBPM予測コンペティション用EDAとプロット機能
 
 # %%
 
-import sys
-import subprocess
-import platform
-import webbrowser
 from pathlib import Path
-from typing import List, Optional, Tuple
+import platform
+import subprocess
+import sys
+from typing import List, Optional
+import webbrowser
 
+from loguru import logger
 import pandas as pd
 import typer
-from loguru import logger
 
 # プロジェクトルートをパスに追加
 sys.path.append(str(Path(__file__).parent.parent))
 
 try:
+    import japanize_matplotlib  # 日本語フォント設定用 # noqa: F401
     import matplotlib.pyplot as plt
     import matplotlib.style as mplstyle
-    import seaborn as sns
     import scipy.stats as stats
-    import japanize_matplotlib
+    import seaborn as sns
 
     VISUALIZATION_AVAILABLE = True
 except ImportError:
     VISUALIZATION_AVAILABLE = False
     logger.warning("可視化ライブラリ (matplotlib, seaborn) がインストールされていません")
 
-from src.config import FIGURES_DIR, PROCESSED_DATA_DIR
 from scripts.my_config import config
+
+from src.config import FIGURES_DIR, PROCESSED_DATA_DIR
 
 app = typer.Typer()
 
@@ -320,7 +321,7 @@ def create_target_vs_features_plots(
         logger.error("可視化ライブラリが利用できません")
         return None
 
-    logger.info(f"ターゲット vs 特徴量の散布図を作成中...")
+    logger.info("ターゲット vs 特徴量の散布図を作成中...")
 
     n_cols = 3
     n_rows = (len(feature_cols) + n_cols - 1) // n_cols

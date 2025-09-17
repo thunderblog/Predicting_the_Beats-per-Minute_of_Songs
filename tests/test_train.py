@@ -41,7 +41,6 @@ class TestTrainWithCrossValidation:
     @patch("src.modeling.train.lgb.train")
     def test_cross_validation_basic(self, mock_lgb_train, mock_config):
         """基本的なクロスバリデーションテスト"""
-        # TODO(human): この関数を実装してください
         # configのモック設定
         mock_config.random_state = 42
         mock_config.objective = "regression"

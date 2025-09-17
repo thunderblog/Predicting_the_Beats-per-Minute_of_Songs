@@ -3,14 +3,14 @@ TICKET-001: データセット処理機能の実装（改善版）
 KaggleのBPM予測コンペティション用データセット処理スクリプト - 参照透過性とコード品質を向上
 """
 
-import sys
 from pathlib import Path
+import sys
 from typing import NamedTuple, Tuple
 
-import pandas as pd
-import typer
 from loguru import logger
+import pandas as pd
 from sklearn.model_selection import train_test_split
+import typer
 
 # プロジェクトルートをパスに追加
 sys.path.append(str(Path(__file__).parent.parent))
@@ -96,13 +96,13 @@ def validate_data(dataset: RawDataset) -> None:
     test_features = set(dataset.test.columns) - {"id"}
 
     if train_features != test_features:
-        logger.error(f"特徴量の不整合:")
+        logger.error("特徴量の不整合:")
         logger.error(f"  訓練データのみ: {train_features - test_features}")
         logger.error(f"  テストデータのみ: {test_features - train_features}")
         raise ValueError("訓練データとテストデータの特徴量が一致しません")
 
     if train_features != set(config.features):
-        logger.error(f"特徴量の不整合:")
+        logger.error("特徴量の不整合:")
         logger.error(f"  設定ファイルにない特徴量: {set(config.features) - train_features}")
         logger.error(f"  データにない特徴量: {set(train_features) - set(config.features)}")
         raise ValueError("Configと実際のデータの特徴量が一致しません")
@@ -272,7 +272,7 @@ def save_processed_data(
     test_df.to_csv(test_path, index=False)
     sample_submission_df.to_csv(sample_path, index=False)
 
-    logger.success(f"処理済みデータを保存完了:")
+    logger.success("処理済みデータを保存完了:")
     logger.success(f"  訓練データ: {train_path}")
     logger.success(f"  検証データ: {val_path}")
     logger.success(f"  テストデータ: {test_path}")

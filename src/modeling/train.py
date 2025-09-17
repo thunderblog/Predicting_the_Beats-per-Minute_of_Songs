@@ -1,19 +1,19 @@
+from datetime import datetime
+import json
 from pathlib import Path
 import pickle
-import json
-from datetime import datetime
 
-import pandas as pd
-import numpy as np
+import lightgbm as lgb
 from loguru import logger
+import numpy as np
+import pandas as pd
+from scripts.my_config import config
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold
 from tqdm import tqdm
 import typer
-from sklearn.model_selection import KFold
-from sklearn.metrics import mean_squared_error
-import lightgbm as lgb
 
 from src.config import MODELS_DIR, PROCESSED_DATA_DIR
-from scripts.my_config import config
 
 app = typer.Typer()
 
@@ -55,9 +55,7 @@ def main(
 
     if use_cross_validation:
         # クロスバリデーション実行
-        cv_scores, models = train_with_cross_validation(
-            X_train, y_train, n_folds=n_folds
-        )
+        cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds)
 
         # 結果の保存
         save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols)
@@ -69,9 +67,7 @@ def main(
         X_val = val_df[feature_cols]
         y_val = val_df[config.target]
 
-        model, train_score, val_score = train_single_model(
-            X_train, y_train, X_val, y_val
-        )
+        model, train_score, val_score = train_single_model(X_train, y_train, X_val, y_val)
 
         # モデルと結果の保存
         save_single_model(model, train_score, val_score, model_dir, exp_name, feature_cols)
@@ -109,16 +105,16 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5)
 
         # LightGBMパラメータ
         params = {
-            'objective': config.objective,
-            'metric': config.metric,
-            'boosting_type': 'gbdt',
-            'num_leaves': config.num_leaves,
-            'learning_rate': config.learning_rate,
-            'feature_fraction': config.feature_fraction,
-            'bagging_fraction': 0.8,
-            'bagging_freq': 5,
-            'verbose': -1,
-            'random_state': config.random_state,
+            "objective": config.objective,
+            "metric": config.metric,
+            "boosting_type": "gbdt",
+            "num_leaves": config.num_leaves,
+            "learning_rate": config.learning_rate,
+            "feature_fraction": config.feature_fraction,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 5,
+            "verbose": -1,
+            "random_state": config.random_state,
         }
 
         # モデル訓練
@@ -126,12 +122,12 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5)
             params,
             train_data,
             valid_sets=[train_data, val_data],
-            valid_names=['train', 'eval'],
+            valid_names=["train", "eval"],
             num_boost_round=config.n_estimators,
             callbacks=[
                 lgb.early_stopping(config.stopping_rounds),
-                lgb.log_evaluation(config.log_evaluation)
-            ]
+                lgb.log_evaluation(config.log_evaluation),
+            ],
         )
 
         # 予測とスコア計算
@@ -146,14 +142,15 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5)
     mean_cv_score = np.mean(cv_scores)
     std_cv_score = np.std(cv_scores)
 
-    logger.success(f"クロスバリデーション完了")
+    logger.success("クロスバリデーション完了")
     logger.info(f"平均RMSE: {mean_cv_score:.4f} ± {std_cv_score:.4f}")
 
     return cv_scores, models
 
 
-def train_single_model(X_train: pd.DataFrame, y_train: pd.Series,
-                      X_val: pd.DataFrame, y_val: pd.Series):
+def train_single_model(
+    X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series
+):
     """単一モデルを訓練する。
 
     Args:
@@ -175,16 +172,16 @@ def train_single_model(X_train: pd.DataFrame, y_train: pd.Series,
 
     # LightGBMパラメータ
     params = {
-        'objective': config.objective,
-        'metric': config.metric,
-        'boosting_type': 'gbdt',
-        'num_leaves': config.num_leaves,
-        'learning_rate': config.learning_rate,
-        'feature_fraction': config.feature_fraction,
-        'bagging_fraction': 0.8,
-        'bagging_freq': 5,
-        'verbose': -1,
-        'random_state': config.random_state,
+        "objective": config.objective,
+        "metric": config.metric,
+        "boosting_type": "gbdt",
+        "num_leaves": config.num_leaves,
+        "learning_rate": config.learning_rate,
+        "feature_fraction": config.feature_fraction,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 5,
+        "verbose": -1,
+        "random_state": config.random_state,
     }
 
     # モデル訓練
@@ -192,12 +189,12 @@ def train_single_model(X_train: pd.DataFrame, y_train: pd.Series,
         params,
         train_data,
         valid_sets=[train_data, val_data],
-        valid_names=['train', 'eval'],
+        valid_names=["train", "eval"],
         num_boost_round=config.n_estimators,
         callbacks=[
             lgb.early_stopping(config.stopping_rounds),
-            lgb.log_evaluation(config.log_evaluation)
-        ]
+            lgb.log_evaluation(config.log_evaluation),
+        ],
     )
 
     # スコア計算
@@ -213,79 +210,81 @@ def train_single_model(X_train: pd.DataFrame, y_train: pd.Series,
     return model, train_score, val_score
 
 
-def save_cv_results(cv_scores: list, models: list, model_dir: Path,
-                   exp_name: str, feature_cols: list):
+def save_cv_results(
+    cv_scores: list, models: list, model_dir: Path, exp_name: str, feature_cols: list
+):
     """クロスバリデーション結果を保存する。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # スコア情報を保存
     results = {
-        'experiment_name': exp_name,
-        'timestamp': timestamp,
-        'cv_scores': cv_scores,
-        'mean_cv_score': np.mean(cv_scores),
-        'std_cv_score': np.std(cv_scores),
-        'n_folds': len(cv_scores),
-        'feature_count': len(feature_cols),
-        'feature_names': feature_cols,
-        'config': {
-            'objective': config.objective,
-            'metric': config.metric,
-            'num_leaves': config.num_leaves,
-            'learning_rate': config.learning_rate,
-            'feature_fraction': config.feature_fraction,
-            'n_estimators': config.n_estimators,
-            'stopping_rounds': config.stopping_rounds,
-        }
+        "experiment_name": exp_name,
+        "timestamp": timestamp,
+        "cv_scores": cv_scores,
+        "mean_cv_score": np.mean(cv_scores),
+        "std_cv_score": np.std(cv_scores),
+        "n_folds": len(cv_scores),
+        "feature_count": len(feature_cols),
+        "feature_names": feature_cols,
+        "config": {
+            "objective": config.objective,
+            "metric": config.metric,
+            "num_leaves": config.num_leaves,
+            "learning_rate": config.learning_rate,
+            "feature_fraction": config.feature_fraction,
+            "n_estimators": config.n_estimators,
+            "stopping_rounds": config.stopping_rounds,
+        },
     }
 
     # 結果をJSONで保存
     results_path = model_dir / f"{exp_name}_cv_results_{timestamp}.json"
-    with open(results_path, 'w', encoding='utf-8') as f:
+    with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     # モデルを保存
     for i, model in enumerate(models):
-        model_path = model_dir / f"{exp_name}_fold_{i+1}_{timestamp}.pkl"
-        with open(model_path, 'wb') as f:
+        model_path = model_dir / f"{exp_name}_fold_{i + 1}_{timestamp}.pkl"
+        with open(model_path, "wb") as f:
             pickle.dump(model, f)
 
     logger.success(f"クロスバリデーション結果を保存: {results_path}")
     logger.info(f"モデル保存完了: {len(models)}個のモデル")
 
 
-def save_single_model(model, train_score: float, val_score: float,
-                     model_dir: Path, exp_name: str, feature_cols: list):
+def save_single_model(
+    model, train_score: float, val_score: float, model_dir: Path, exp_name: str, feature_cols: list
+):
     """単一モデル結果を保存する。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # スコア情報を保存
     results = {
-        'experiment_name': exp_name,
-        'timestamp': timestamp,
-        'train_rmse': train_score,
-        'val_rmse': val_score,
-        'feature_count': len(feature_cols),
-        'feature_names': feature_cols,
-        'config': {
-            'objective': config.objective,
-            'metric': config.metric,
-            'num_leaves': config.num_leaves,
-            'learning_rate': config.learning_rate,
-            'feature_fraction': config.feature_fraction,
-            'n_estimators': config.n_estimators,
-            'stopping_rounds': config.stopping_rounds,
-        }
+        "experiment_name": exp_name,
+        "timestamp": timestamp,
+        "train_rmse": train_score,
+        "val_rmse": val_score,
+        "feature_count": len(feature_cols),
+        "feature_names": feature_cols,
+        "config": {
+            "objective": config.objective,
+            "metric": config.metric,
+            "num_leaves": config.num_leaves,
+            "learning_rate": config.learning_rate,
+            "feature_fraction": config.feature_fraction,
+            "n_estimators": config.n_estimators,
+            "stopping_rounds": config.stopping_rounds,
+        },
     }
 
     # 結果をJSONで保存
     results_path = model_dir / f"{exp_name}_results_{timestamp}.json"
-    with open(results_path, 'w', encoding='utf-8') as f:
+    with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     # モデルを保存
     model_path = model_dir / f"{exp_name}_model_{timestamp}.pkl"
-    with open(model_path, 'wb') as f:
+    with open(model_path, "wb") as f:
         pickle.dump(model, f)
 
     logger.success(f"モデル結果を保存: {results_path}")
