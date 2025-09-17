@@ -380,13 +380,45 @@ experiments/
 ## 精度向上タスクチケット
 
 ### 第6段階: 高度な特徴量エンジニアリング
-8. **[TICKET-008] 音楽ジャンル推定特徴量の作成**
+8. **[TICKET-008] 音楽ジャンル推定特徴量の作成** ✅ **完了**
    - ファイル: `src/features.py` (機能拡張)
+   - 現状: 実装完了、評価結果でballad_genre_scoreが最重要特徴量に選出
    - 要件:
      - Energy×RhythmScore → ダンス系ジャンル特徴量
      - AcousticQuality×InstrumentalScore → アコースティック系特徴量
      - VocalContent×MoodScore → バラード系特徴量
      - 各ジャンル特徴量のBPM予測への寄与度分析
+   - 課題: 多重共線性によりRMSE改善が微小（-0.0010）
+
+   **8.1 [TICKET-008-01] 多重共線性除去による特徴量最適化**
+   - ファイル: `src/features.py` (機能拡張)
+   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
+   - 背景:
+     - ジャンル特徴量と元特徴量の高相関確認（ballad_genre_score vs VocalContent: 0.803）
+     - dance_genre_score vs Energy: 0.871の強い相関
+   - 要件:
+     - 高相関ペア（>0.7）の元特徴量自動除去機能
+     - ジャンル特徴量優先の特徴量選択ロジック
+     - 相関行列による自動検出・除去システム
+     - Before/After性能比較機能
+
+   **8.2 [TICKET-008-02] 独立性の高い高次特徴量の開発**
+   - ファイル: `src/features.py` (新規関数追加)
+   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
+   - 要件:
+     - 比率ベース特徴量（VocalContent/Energy、AcousticQuality/Loudness）
+     - 対数変換時間特徴量（log(TrackDurationMs) × RhythmScore）
+     - 標準化済み交互作用（Z-score正規化後の積）
+     - 音楽理論ベースの複雑指標（テンポ×音響品質の複合指標）
+
+   **8.3 [TICKET-008-03] 次元削減とPCA特徴量の実装**
+   - 新規ファイル: `src/features/dimensionality_reduction.py`
+   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
+   - 要件:
+     - PCA変換による主成分特徴量作成
+     - ジャンル特徴量群の主成分分析
+     - 元特徴量群の独立成分分析（ICA）
+     - 最適な主成分数の自動選択（分散寄与率）
 
 9. **[TICKET-009] テンポカテゴリ特徴量の実装**
    - ファイル: `src/features.py` (機能拡張)
@@ -445,35 +477,3 @@ experiments/
       - 結果の自動集約（results.json）
       - 実験比較・可視化ダッシュボード
       - A/Bテスト機能とベンチマーク追跡
-
-## 精度向上タスクチケット（フェーズ2: 多重共線性改善）
-
-### 第11段階: 多重共線性対策と特徴量最適化
-16. **[TICKET-016] 多重共線性除去による特徴量最適化**
-    - ファイル: `src/features.py` (機能拡張)
-    - 現状: TICKET-008で多重共線性問題を発見
-    - 背景:
-      - ジャンル特徴量と元特徴量の高相関確認（ballad_genre_score vs VocalContent: 0.803）
-      - dance_genre_score vs Energy: 0.871の強い相関
-      - RMSE改善が微小（-0.0010）な原因が多重共線性
-    - 要件:
-      - 高相関ペア（>0.7）の元特徴量自動除去機能
-      - ジャンル特徴量優先の特徴量選択ロジック
-      - 相関行列による自動検出・除去システム
-      - Before/After性能比較機能
-
-17. **[TICKET-017] 独立性の高い高次特徴量の開発**
-    - ファイル: `src/features.py` (新規関数追加)
-    - 要件:
-      - 比率ベース特徴量（VocalContent/Energy、AcousticQuality/Loudness）
-      - 対数変換時間特徴量（log(TrackDurationMs) × RhythmScore）
-      - 標準化済み交互作用（Z-score正規化後の積）
-      - 音楽理論ベースの複雑指標（テンポ×音響品質の複合指標）
-
-18. **[TICKET-018] 次元削減とPCA特徴量の実装**
-    - 新規ファイル: `src/features/dimensionality_reduction.py`
-    - 要件:
-      - PCA変換による主成分特徴量作成
-      - ジャンル特徴量群の主成分分析
-      - 元特徴量群の独立成分分析（ICA）
-      - 最適な主成分数の自動選択（分散寄与率）
