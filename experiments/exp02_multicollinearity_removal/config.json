@@ -1,0 +1,50 @@
+{
+  "experiment_name": "exp02_multicollinearity_removal",
+  "description": "多重共線性除去による特徴量最適化実験",
+  "date_created": "2025-09-20",
+  "model_config": {
+    "model_type": "LightGBM",
+    "n_estimators": 1000,
+    "learning_rate": 0.1,
+    "max_depth": 6,
+    "num_leaves": 31,
+    "min_child_samples": 20,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 0.1,
+    "random_state": 42,
+    "early_stopping_rounds": 100,
+    "verbose": -1
+  },
+  "data_config": {
+    "train_samples": "TBD",
+    "test_samples": "TBD",
+    "n_features_before": "TBD",
+    "n_features_after": "TBD",
+    "cv_folds": 5
+  },
+  "features": {
+    "original_features": [
+      "RhythmScore", "AudioLoudness", "VocalContent", "AcousticQuality",
+      "InstrumentalScore", "LivePerformanceLikelihood", "MoodScore",
+      "TrackDurationMs", "Energy"
+    ],
+    "engineered_features": [
+      "ballad_genre_score", "dance_genre_score", "acoustic_genre_score",
+      "interaction_features", "duration_features", "statistical_features"
+    ],
+    "feature_selection": "多重共線性除去（threshold=0.7、ジャンル特徴量優先）",
+    "scaling": "なし（生特徴量使用）"
+  },
+  "preprocessing": {
+    "missing_values": "なし（データセットに欠損値なし）",
+    "outlier_handling": "なし",
+    "feature_engineering": "音楽ジャンル特徴量、交互作用、時間統計特徴量",
+    "multicollinearity_removal": {
+      "threshold": 0.7,
+      "prioritize_genre_features": true,
+      "method": "高相関ペアの元特徴量除去"
+    }
+  }
+}

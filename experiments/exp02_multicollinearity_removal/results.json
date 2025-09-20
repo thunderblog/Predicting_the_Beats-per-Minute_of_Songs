@@ -1,0 +1,51 @@
+{
+  "experiment_name": "exp02_multicollinearity_removal",
+  "timestamp": "2025-09-20T18:30:00+09:00",
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 5,
+    "mean_rmse": "TBD - 要確認",
+    "std_rmse": "TBD - 要確認",
+    "fold_results": {
+      "fold_1": {"rmse": "TBD", "model_file": "optimized_lgb_fold_1.pkl"},
+      "fold_2": {"rmse": "TBD", "model_file": "optimized_lgb_fold_2.pkl"},
+      "fold_3": {"rmse": "TBD", "model_file": "optimized_lgb_fold_3.pkl"},
+      "fold_4": {"rmse": "TBD", "model_file": "optimized_lgb_fold_4.pkl"},
+      "fold_5": {"rmse": "TBD", "model_file": "optimized_lgb_fold_5.pkl"}
+    }
+  },
+  "leaderboard_results": {
+    "submission_date": "2025-09-20",
+    "public_lb_score": 26.3879,
+    "public_lb_rank": "TBD",
+    "private_lb_score": null,
+    "private_lb_rank": null
+  },
+  "prediction_results": {
+    "ensemble_method": "5-fold平均アンサンブル",
+    "n_models": 5,
+    "test_predictions": {
+      "mean_prediction": "TBD",
+      "min_prediction": "TBD",
+      "max_prediction": "TBD",
+      "std_prediction": "TBD"
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": "TBD - CVスコア確認後に計算",
+    "overfitting_indicator": "TBD - CV-LB差で判定",
+    "feature_reduction_impact": "多重共線性除去による特徴量削減効果を評価"
+  },
+  "multicollinearity_analysis": {
+    "features_removed": "TBD - multicollinearity_removal_info.csv参照",
+    "correlation_threshold": 0.7,
+    "high_correlation_pairs": "TBD - high_correlation_pairs.csv参照",
+    "rmse_improvement": "TBD - multicollinearity_impact_results.json参照"
+  },
+  "notes": [
+    "多重共線性除去により冗長な特徴量を削減",
+    "ジャンル特徴量を優先して保持",
+    "LBスコア26.3879を達成（改善確認）",
+    "CVスコアとの一貫性要確認"
+  ]
+}

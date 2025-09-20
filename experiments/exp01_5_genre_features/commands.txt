@@ -4,10 +4,10 @@
 python -m src.features --create-genre --output-dir=data/processed
 
 ## 2. モデル訓練（拡張特徴量使用）
-python -m src.modeling.train --train-path=data/processed/train_features.csv --validation-path=data/processed/validation_features.csv --experiment-name=genre_features_lgb
+python -m src.modeling.train --train-path=data/processed/train_features.csv --val-path=data/processed/validation_features.csv --exp-name=genre_features_lgb
 
 ## 3. 予測実行（テストデータ）
-python -m src.modeling.predict --test-path=data/processed/test_features.csv --model-dir=models --experiment-name=genre_features_lgb --output-path=data/processed/submission_genre_features.csv
+python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=genre_features_lgb --output-path=data/processed/submission_genre_features.csv
 
 ## 4. 性能評価（ベースライン比較）
 python scripts/evaluate_genre_features.py

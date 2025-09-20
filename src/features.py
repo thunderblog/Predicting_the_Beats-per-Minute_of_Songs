@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from scipy.stats import zscore
 from tqdm import tqdm
 import typer
 
