@@ -172,6 +172,83 @@ def create_statistical_features(df: pd.DataFrame) -> pd.DataFrame:
     return df_features
 
 
+def create_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
+    """独立性の高い高次特徴量を作成する。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        高次特徴量が追加されたデータフレーム
+    """
+    logger.info("独立性の高い高次特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # 1. 比率ベース特徴量（ゼロ除算対策付き）
+    logger.info("比率ベース特徴量を作成中...")
+    df_features["vocal_energy_ratio"] = df["VocalContent"] / (df["Energy"] + 1e-8)
+    df_features["acoustic_loudness_ratio"] = df["AcousticQuality"] / (df["AudioLoudness"] + 1e-8)
+    df_features["rhythm_duration_ratio"] = df["RhythmScore"] / (np.log1p(df["TrackDurationMs"]) + 1e-8)
+    df_features["instrumental_live_ratio"] = df["InstrumentalScore"] / (df["LivePerformanceLikelihood"] + 1e-8)
+
+    # 2. 対数変換時間特徴量（スケール正規化）
+    logger.info("対数変換時間特徴量を作成中...")
+    log_duration = np.log1p(df["TrackDurationMs"])  # log(1+x)でゼロ値対応
+    df_features["log_duration_rhythm"] = log_duration * df["RhythmScore"]
+    df_features["log_duration_energy"] = log_duration * df["Energy"]
+    df_features["log_duration_mood"] = log_duration * df["MoodScore"]
+
+    # 時間の3次元カテゴリ化
+    duration_percentiles = np.percentile(df["TrackDurationMs"], [33, 67])
+    df_features["duration_category"] = pd.cut(
+        df["TrackDurationMs"],
+        bins=[0] + list(duration_percentiles) + [np.inf],
+        labels=[0, 1, 2]  # short, medium, long
+    ).astype(int)
+
+    # 3. 標準化済み交互作用特徴量（Z-score正規化後の積）
+    logger.info("標準化済み交互作用特徴量を作成中...")
+
+    # 主要特徴量のZ-score正規化
+    vocal_z = zscore(df["VocalContent"])
+    energy_z = zscore(df["Energy"])
+    rhythm_z = zscore(df["RhythmScore"])
+    mood_z = zscore(df["MoodScore"])
+    acoustic_z = zscore(df["AcousticQuality"])
+    loudness_z = zscore(df["AudioLoudness"])
+
+    # 標準化済み交互作用
+    df_features["standardized_vocal_mood"] = vocal_z * mood_z
+    df_features["standardized_energy_rhythm"] = energy_z * rhythm_z
+    df_features["standardized_acoustic_loudness"] = acoustic_z * loudness_z
+    df_features["standardized_vocal_energy"] = vocal_z * energy_z
+    df_features["standardized_rhythm_mood"] = rhythm_z * mood_z
+
+    # 4. 音楽理論ベース複雑指標（BPM予測特化）
+    logger.info("音楽理論ベース複雑指標を作成中...")
+
+    # テンポ複雑性指標（リズム×音響品質/エネルギー）
+    df_features["tempo_complexity"] = (df["RhythmScore"] * df["AcousticQuality"]) / (df["Energy"] + 1e-8)
+
+    # パフォーマンス動的指標（ライブ性×楽器性）
+    df_features["performance_dynamics"] = df["LivePerformanceLikelihood"] * df["InstrumentalScore"]
+
+    # 音楽密度指標（音量×ボーカル×楽器/時間）
+    df_features["music_density"] = (df["AudioLoudness"] * df["VocalContent"] * df["InstrumentalScore"]) / (log_duration + 1e-8)
+
+    # ハーモニック複雑性（音響品質×ムード/エネルギー）
+    df_features["harmonic_complexity"] = (df["AcousticQuality"] * df["MoodScore"]) / (df["Energy"] + 1e-8)
+
+    # 楽曲構造推定（リズム×時間×ライブ性）
+    df_features["song_structure_indicator"] = df["RhythmScore"] * log_duration * df["LivePerformanceLikelihood"]
+
+    n_new_features = len(df_features.columns) - len(df.columns)
+    logger.success(f"高次特徴量を作成完了: {n_new_features}個の新特徴量を追加")
+
+    return df_features
+
+
 def select_features(
     X_train: pd.DataFrame,
     y_train: pd.Series,
@@ -742,6 +819,7 @@ def main(
     create_duration: bool = True,
     create_statistical: bool = True,
     create_genre: bool = True,
+    create_advanced: bool = False,
     remove_multicollinearity: bool = False,
     multicollinearity_threshold: float = 0.7,
     prioritize_genre_features: bool = True,
@@ -807,6 +885,10 @@ def main(
         # 音楽ジャンル推定特徴量の作成
         if create_genre:
             enhanced_df = create_music_genre_features(enhanced_df)
+
+        # 独立性の高い高次特徴量の作成
+        if create_advanced:
+            enhanced_df = create_advanced_features(enhanced_df)
 
         enhanced_datasets[name] = enhanced_df
         logger.info(f"{name}データセット: {enhanced_df.shape[1]}特徴量を生成")
@@ -958,6 +1040,88 @@ def main(
         logger.info(f"除去された特徴量数: {multicollinearity_results['removed_features_count']}")
         logger.info(f"性能改善: {multicollinearity_results['rmse_improvement']:+.4f}")
         logger.info(f"改善率: {multicollinearity_results['improvement_percentage']:+.2f}%")
+
+    # 実装テスト: --create-advancedオプションの動作確認
+    if create_advanced and logger.level.name == "DEBUG":
+        logger.info("=== TICKET-008-02実装テスト実行中 ===")
+
+        # テスト用サンプルデータ作成
+        test_data = pd.DataFrame({
+            'RhythmScore': [0.7, 0.8, 0.6, 0.9, 0.5],
+            'AudioLoudness': [0.6, 0.7, 0.5, 0.8, 0.4],
+            'VocalContent': [0.8, 0.6, 0.9, 0.5, 0.7],
+            'AcousticQuality': [0.5, 0.8, 0.7, 0.6, 0.9],
+            'InstrumentalScore': [0.7, 0.5, 0.8, 0.9, 0.6],
+            'LivePerformanceLikelihood': [0.4, 0.6, 0.5, 0.7, 0.8],
+            'MoodScore': [0.6, 0.7, 0.8, 0.5, 0.9],
+            'TrackDurationMs': [200000, 180000, 220000, 240000, 160000],
+            'Energy': [0.8, 0.9, 0.7, 0.6, 0.5]
+        })
+
+        original_features = len(test_data.columns)
+        logger.info(f"テストデータ: {test_data.shape[0]}サンプル, {original_features}特徴量")
+
+        # 高次特徴量作成テスト
+        try:
+            enhanced_test_data = create_advanced_features(test_data)
+            new_features = len(enhanced_test_data.columns) - original_features
+
+            # 1. 特徴量数確認
+            expected_features = 18  # 4+4+5+5=18個の新特徴量
+            if new_features == expected_features:
+                logger.success(f"✓ 特徴量数テスト: {new_features}個の新特徴量を正常に追加")
+            else:
+                logger.warning(f"⚠ 特徴量数不一致: 期待{expected_features}個, 実際{new_features}個")
+
+            # 2. エラー検証（NaN, inf値の確認）
+            nan_count = enhanced_test_data.isnull().sum().sum()
+            inf_count = np.isinf(enhanced_test_data.select_dtypes(include=[np.number])).sum().sum()
+
+            if nan_count == 0 and inf_count == 0:
+                logger.success(f"✓ エラーテスト: NaN({nan_count}), inf({inf_count})値なし")
+            else:
+                logger.error(f"✗ エラー検出: NaN({nan_count}), inf({inf_count})値あり")
+
+            # 3. 新特徴量の統計情報表示
+            new_feature_names = enhanced_test_data.columns[original_features:]
+            logger.info("=== 新特徴量統計情報 ===")
+
+            for feature in new_feature_names:
+                values = enhanced_test_data[feature]
+                stats = f"{feature}: 平均={values.mean():.3f}, 標準偏差={values.std():.3f}, 範囲=[{values.min():.3f}, {values.max():.3f}]"
+                logger.info(stats)
+
+            # 4. 特徴量妥当性確認
+            validity_checks = {
+                "比率特徴量": [col for col in new_feature_names if 'ratio' in col],
+                "対数変換特徴量": [col for col in new_feature_names if 'log_duration' in col or 'duration_category' in col],
+                "標準化済み特徴量": [col for col in new_feature_names if 'standardized' in col],
+                "音楽理論特徴量": [col for col in new_feature_names if any(x in col for x in ['tempo', 'performance', 'music', 'harmonic', 'song'])]
+            }
+
+            logger.info("=== 特徴量カテゴリ別確認 ===")
+            for category, features in validity_checks.items():
+                if features:
+                    logger.info(f"{category}: {len(features)}個 - {', '.join(features[:2])}{'...' if len(features) > 2 else ''}")
+                else:
+                    logger.warning(f"{category}: 0個（期待値と異なる可能性）")
+
+            # 5. 特定特徴量の値域チェック
+            if 'duration_category' in enhanced_test_data.columns:
+                cat_values = enhanced_test_data['duration_category'].unique()
+                if set(cat_values).issubset({0, 1, 2}):
+                    logger.success(f"✓ duration_categoryの値域確認: {sorted(cat_values)}")
+                else:
+                    logger.error(f"✗ duration_category値域エラー: {cat_values}")
+
+            logger.success("=== TICKET-008-02実装テスト完了 ===")
+
+        except Exception as e:
+            logger.error(f"✗ 実装テスト失敗: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"詳細: {traceback.format_exc()}")
+
+        logger.info("実装テスト詳細は DEBUG レベルでのみ表示されます")
 
 
 if __name__ == "__main__":

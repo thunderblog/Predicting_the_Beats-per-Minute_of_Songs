@@ -5,7 +5,8 @@
       "Bash(tree:*)",
       "Bash(for:*)",
       "Bash(do echo \"=== $exp ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python:*)"
     ]
   },
   "outputStyle": "Learning"

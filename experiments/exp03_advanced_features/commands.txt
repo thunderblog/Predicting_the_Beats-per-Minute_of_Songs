@@ -1,0 +1,157 @@
+TICKET-008-02: 独立性の高い高次特徴量実装 - コマンド実行手順
+
+=== 基本実行パイプライン ===
+
+# 1. 高次特徴量生成（推奨：フル機能版）
+python -m src.features --create-genre --remove-multicollinearity --create-advanced --output-dir=data/processed
+
+# 2. 高次特徴量付きモデル訓練
+python -m src.modeling.train --train-path=data/processed/train_features.csv --val-path=data/processed/validation_features.csv --exp-name=advanced_features_lgb
+
+# 3. 予測実行
+python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=advanced_features_lgb --output-path=data/processed/submission_advanced_features.csv
+
+=== 段階的実行（デバッグ・検証用） ===
+
+# Stage 1: 高次特徴量のみテスト
+python -m src.features --create-advanced --output-dir=data/processed/debug
+
+# Stage 2: ジャンル特徴量 + 高次特徴量
+python -m src.features --create-genre --create-advanced --output-dir=data/processed/debug
+
+# Stage 3: フル機能（多重共線性除去含む）
+python -m src.features --create-genre --remove-multicollinearity --create-advanced --output-dir=data/processed
+
+=== 実行オプション詳細 ===
+
+## 高次特徴量オプション
+--create-advanced              # 18個の高次特徴量を生成
+  ├── 比率ベース特徴量 (4個)
+  ├── 対数変換時間特徴量 (4個)
+  ├── 標準化済み交互作用 (5個)
+  └── 音楽理論ベース複雑指標 (5個)
+
+## 組み合わせオプション（推奨順）
+--create-genre                  # ジャンル特徴量（TICKET-008）
+--remove-multicollinearity      # 多重共線性除去（TICKET-008-01）
+--create-advanced              # 高次特徴量（TICKET-008-02）
+
+## 多重共線性制御
+--multicollinearity-threshold=0.7        # デフォルト（推奨）
+--multicollinearity-threshold=0.6        # 積極的除去
+--multicollinearity-threshold=0.8        # 保守的除去
+--no-prioritize-genre-features           # ジャンル特徴量優先なし
+
+=== 特徴量タイプ別実行 ===
+
+# 比率ベース特徴量のみ検証
+python -c "
+import pandas as pd
+from src.features import create_advanced_features
+df = pd.read_csv('data/raw/train.csv').head(1000)
+result = create_advanced_features(df)
+ratio_cols = [col for col in result.columns if 'ratio' in col]
+print(f'比率特徴量: {len(ratio_cols)}個')
+print(ratio_cols)
+"
+
+# 対数変換時間特徴量のみ検証
+python -c "
+import pandas as pd
+from src.features import create_advanced_features
+df = pd.read_csv('data/raw/train.csv').head(1000)
+result = create_advanced_features(df)
+log_cols = [col for col in result.columns if 'log_duration' in col or 'duration_category' in col]
+print(f'対数変換特徴量: {len(log_cols)}個')
+print(log_cols)
+"
+
+=== 性能比較実行 ===
+
+# ベースライン（TICKET-008-01結果）
+LB_BASELINE=26.3879
+
+# 高次特徴量追加版実行後の比較
+python -c "
+import pandas as pd
+baseline_lb = 26.3879
+# submission_advanced_features.csvの結果確認後に更新
+print(f'ベースライン LB: {baseline_lb}')
+print('高次特徴量版 LB: [実行後に更新]')
+"
+
+=== 実行時間とリソース ===
+
+実行段階別の推定時間:
+- Stage 1 (高次特徴量のみ): 2-3分
+- Stage 2 (ジャンル+高次): 3-5分
+- Stage 3 (フル機能): 5-8分
+- モデル訓練: 15-25分
+- 予測実行: 2-3分
+
+メモリ使用量: 4-6GB（最大）
+CPU使用率: 高負荷（特徴量生成時）
+
+=== トラブルシューティング ===
+
+## 一般的な問題
+
+### メモリ不足
+# 小サンプルでテスト
+python -m src.features --create-advanced --output-dir=data/processed/test --sample-size=10000
+
+### 実行時間過長
+# キャッシュ有効化（該当機能があれば）
+export FEATURES_CACHE=true
+python -m src.features --create-advanced
+
+### 特徴量数確認
+python -c "
+df = pd.read_csv('data/processed/train_features.csv')
+print(f'総特徴量数: {df.shape[1]}')
+advanced_cols = [col for col in df.columns if any(x in col for x in ['ratio', 'log_duration', 'standardized', 'tempo', 'performance', 'music', 'harmonic', 'song'])]
+print(f'高次特徴量数: {len(advanced_cols)}')
+"
+
+=== 検証コマンド ===
+
+# 生成された特徴量の確認
+ls -la data/processed/train_features.csv
+head -n 1 data/processed/train_features.csv | tr ',' '\n' | grep -E "(ratio|log_duration|standardized|tempo|performance|music|harmonic|song)"
+
+# 特徴量統計の確認
+python -c "
+import pandas as pd
+df = pd.read_csv('data/processed/train_features.csv')
+advanced_features = [col for col in df.columns if any(x in col for x in ['ratio', 'log_duration', 'standardized', 'tempo', 'performance', 'music', 'harmonic', 'song'])]
+print('=== 高次特徴量統計 ===')
+for col in advanced_features:
+    stats = df[col].describe()
+    print(f'{col}: 平均={stats[\"mean\"]:.3f}, 標準偏差={stats[\"std\"]:.3f}')
+"
+
+# エラー値（NaN、inf）チェック
+python -c "
+import pandas as pd
+import numpy as np
+df = pd.read_csv('data/processed/train_features.csv')
+print(f'NaN値: {df.isnull().sum().sum()}')
+numeric_df = df.select_dtypes(include=[np.number])
+print(f'inf値: {np.isinf(numeric_df).sum().sum()}')
+"
+
+=== Next Steps ===
+
+実行完了後:
+1. LBスコアをexperiment_results.csvに記録
+2. exp03実験ディレクトリに結果コピー
+3. 特徴量重要度分析結果確認
+4. TICKET-008-03（次元削減）検討
+
+=== 期待される改善 ===
+
+目標:
+- 特徴量数: +18個（比率4+対数4+標準化5+音楽理論5）
+- LB改善: 26.3879 → 26.2x～26.3x
+- 改善率: 0.2-0.5%
+- 重要特徴量: tempo_complexity, performance_dynamics期待
