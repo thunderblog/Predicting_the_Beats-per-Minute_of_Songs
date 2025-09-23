@@ -727,6 +727,130 @@ def remove_correlated_features(
     return cleaned_X, removal_df
 
 
+def create_rhythm_periodicity_features(df: pd.DataFrame) -> pd.DataFrame:
+    """ドラマー視点のリズム周期性特徴量を作成する。
+
+    音楽理論に基づき、リズムパターン、周期性一貫性、疑似ドラム系特徴量、
+    拍子・テンポ変動、周期性コヒーレンス指標を生成してBPM予測精度を向上させる。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        リズム周期性特徴量が追加されたデータフレーム
+    """
+    logger.info("ドラマー視点リズム周期性特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # TODO(human): 4/4拍子・3/4拍子・シンコペーション検出のロジックを実装
+
+    # 2. 周期性一貫性スコア（TrackDurationとBPM推定の整合性検証）
+    logger.info("周期性一貫性スコアを作成中...")
+
+    # 基本BPM推定（RhythmScore×Energyベース）
+    estimated_bpm_base = 60 + (df["RhythmScore"] * df["Energy"] * 120)  # 60-180 BPM range
+
+    # トラック長とBPMの理論的整合性
+    # 一般的な楽曲では、BPM×楽曲長（分）×4/4拍子 = 総拍数が妥当な範囲にある
+    track_minutes = df["TrackDurationMs"] / (1000 * 60)
+    theoretical_beats = estimated_bpm_base * track_minutes * 4  # 4/4拍子仮定
+
+    # 妥当な総拍数範囲（64-512拍）との整合性スコア
+    ideal_beats_range = [64, 512]
+    df_features["tempo_duration_consistency"] = 1 - np.abs(
+        theoretical_beats.clip(ideal_beats_range[0], ideal_beats_range[1]) - theoretical_beats
+    ) / (ideal_beats_range[1] - ideal_beats_range[0])
+
+    # 3. 疑似ドラム系特徴量（キック・スネア・ハイハット推定密度）
+    logger.info("疑似ドラム系特徴量を作成中...")
+
+    # キック（低音域）推定：低RhythmScore + 高Energy = 重いキック
+    df_features["pseudo_kick_density"] = (1 - df["RhythmScore"]) * df["Energy"] * df["AudioLoudness"]
+
+    # スネア（中音域）推定：中RhythmScore + 中Energy = 安定したスネア
+    rhythm_mid = 0.5 - np.abs(df["RhythmScore"] - 0.5)  # 0.5に近いほど高い
+    energy_mid = 0.5 - np.abs(df["Energy"] - 0.5)
+    df_features["pseudo_snare_density"] = rhythm_mid * energy_mid * df["InstrumentalScore"]
+
+    # ハイハット（高音域）推定：高RhythmScore + 低Energy = 軽やかなハイハット
+    df_features["pseudo_hihat_density"] = df["RhythmScore"] * (1 - df["Energy"]) * df["LivePerformanceLikelihood"]
+
+    # ドラムセット全体の複雑性
+    df_features["drum_complexity"] = (
+        df_features["pseudo_kick_density"] +
+        df_features["pseudo_snare_density"] +
+        df_features["pseudo_hihat_density"]
+    ) / 3
+
+    # 4. 拍子・テンポ変動推定（ルバート、加速、減速パターン検出）
+    logger.info("拍子・テンポ変動推定を作成中...")
+
+    # ルバート（自由テンポ）推定：高AcousticQuality + 低RhythmScore
+    df_features["rubato_likelihood"] = df["AcousticQuality"] * (1 - df["RhythmScore"]) * df["MoodScore"]
+
+    # 加速パターン推定：高Energy×時間進行
+    # 長い楽曲ほど加速の可能性が高い
+    normalized_duration = (df["TrackDurationMs"] - df["TrackDurationMs"].min()) / (
+        df["TrackDurationMs"].max() - df["TrackDurationMs"].min() + 1e-8
+    )
+    df_features["accelerando_likelihood"] = df["Energy"] * df["RhythmScore"] * normalized_duration
+
+    # 減速パターン推定：高MoodScore + 中Energy
+    df_features["ritardando_likelihood"] = df["MoodScore"] * (1 - df["Energy"]) * df["VocalContent"]
+
+    # テンポ安定性指標
+    df_features["tempo_stability"] = 1 - (
+        df_features["rubato_likelihood"] +
+        df_features["accelerando_likelihood"] +
+        df_features["ritardando_likelihood"]
+    ) / 3
+
+    # 5. 周期性コヒーレンス指標（RhythmScore×Energy×時間整合性）
+    logger.info("周期性コヒーレンス指標を作成中...")
+
+    # 基本リズムコヒーレンス
+    df_features["rhythm_energy_coherence"] = df["RhythmScore"] * df["Energy"]
+
+    # 時間軸でのコヒーレンス（楽曲長との調和）
+    log_duration = np.log1p(df["TrackDurationMs"])
+    normalized_log_duration = (log_duration - log_duration.min()) / (log_duration.max() - log_duration.min() + 1e-8)
+
+    df_features["temporal_coherence"] = df_features["rhythm_energy_coherence"] * normalized_log_duration
+
+    # 全体的な周期性品質指標
+    df_features["overall_periodicity_quality"] = (
+        df_features["tempo_duration_consistency"] * 0.3 +
+        df_features["drum_complexity"] * 0.25 +
+        df_features["tempo_stability"] * 0.25 +
+        df_features["temporal_coherence"] * 0.2
+    )
+
+    # 楽曲構造推定（イントロ・サビ・アウトロの推定）
+    # イントロ推定：短めの楽曲で高RhythmScore
+    intro_likelihood = (1 - normalized_duration) * df["RhythmScore"] * df["InstrumentalScore"]
+
+    # サビ推定：中程度の楽曲長で高Energy + 高VocalContent
+    chorus_likelihood = (1 - np.abs(normalized_duration - 0.5)) * df["Energy"] * df["VocalContent"]
+
+    # アウトロ推定：長い楽曲で高MoodScore
+    outro_likelihood = normalized_duration * df["MoodScore"] * df["AcousticQuality"]
+
+    df_features["intro_section_likelihood"] = intro_likelihood
+    df_features["chorus_section_likelihood"] = chorus_likelihood
+    df_features["outro_section_likelihood"] = outro_likelihood
+
+    # 楽曲構造の明確性
+    df_features["song_structure_clarity"] = (
+        intro_likelihood + chorus_likelihood + outro_likelihood
+    ) / 3
+
+    n_new_features = len(df_features.columns) - len(df.columns)
+    logger.success(f"リズム周期性特徴量を作成完了: {n_new_features}個の新特徴量を追加")
+
+    return df_features
+
+
 def evaluate_multicollinearity_impact(
     X_original: pd.DataFrame,
     X_cleaned: pd.DataFrame,
@@ -820,6 +944,7 @@ def main(
     create_statistical: bool = True,
     create_genre: bool = True,
     create_advanced: bool = False,
+    create_rhythm: bool = False,
     remove_multicollinearity: bool = False,
     multicollinearity_threshold: float = 0.7,
     prioritize_genre_features: bool = True,
@@ -840,6 +965,8 @@ def main(
         create_duration: 時間ベースの特徴量を作成するかどうか
         create_statistical: 統計的特徴量を作成するかどうか
         create_genre: 音楽ジャンル推定特徴量を作成するかどうか
+        create_advanced: 独立性の高い高次特徴量を作成するかどうか
+        create_rhythm: ドラマー視点リズム周期性特徴量を作成するかどうか
         remove_multicollinearity: 多重共線性除去を行うかどうか
         multicollinearity_threshold: 多重共線性検出の相関閾値
         prioritize_genre_features: 多重共線性除去時にジャンル特徴量を優先するかどうか
@@ -889,6 +1016,10 @@ def main(
         # 独立性の高い高次特徴量の作成
         if create_advanced:
             enhanced_df = create_advanced_features(enhanced_df)
+
+        # ドラマー視点リズム周期性特徴量の作成
+        if create_rhythm:
+            enhanced_df = create_rhythm_periodicity_features(enhanced_df)
 
         enhanced_datasets[name] = enhanced_df
         logger.info(f"{name}データセット: {enhanced_df.shape[1]}特徴量を生成")

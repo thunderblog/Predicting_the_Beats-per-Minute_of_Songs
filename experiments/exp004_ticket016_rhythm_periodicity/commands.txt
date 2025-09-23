@@ -1,0 +1,52 @@
+# TICKET-016 実行コマンド履歴
+
+# Phase 1: 機能テスト
+# 基本動作テスト（experiments/exp004_ticket016_rhythm_periodicity/ から実行）
+python -c "import sys; sys.path.append('../../..'); from src.features import create_rhythm_periodicity_features; ..."
+
+# Phase 3: 特徴量生成
+python -m src.features \
+  --create-interactions \
+  --create-duration \
+  --create-statistical \
+  --create-genre \
+  --create-advanced \
+  --create-rhythm \
+  --remove-multicollinearity \
+  --multicollinearity-threshold=0.7 \
+  --prioritize-genre-features \
+  --apply-scaling \
+  --scaler-type=standard
+
+# Phase 4: モデル訓練
+python -m src.modeling.train \
+  --train-features-path=data/processed/train_features.csv \
+  --validation-features-path=data/processed/validation_features.csv \
+  --exp-name=ticket016_rhythm_features \
+  --n-estimators=1000 \
+  --learning-rate=0.1 \
+  --early-stopping-rounds=100
+
+# Phase 4: 予測生成
+python -m src.modeling.predict \
+  --test-features-path=data/processed/test_features.csv \
+  --exp-name=ticket016_rhythm_features \
+  --output-path=data/processed/submission_ticket016_rhythm.csv
+
+# Phase 6: ファイルコピー
+cp data/processed/submission_ticket016_rhythm.csv experiments/exp004_ticket016_rhythm_periodicity/submission.csv
+cp data/processed/feature_importance_all.csv experiments/exp004_ticket016_rhythm_periodicity/feature_importance.csv
+
+# 実行日時: 2025-09-23
+# 実行者: Claude Code
+# ブランチ: feature/ticket-016/rhythm-periodicitypython -m src.modeling.train --train-path=data/processed/train_features.csv --val-path=data/processed/validation_features.csv --exp-name=ticket016_rhythm_features --use-cross-validation --n-folds=5
+python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=ticket016_rhythm_features --output-path=data/processed/submission_ticket016_rhythm.csv
+
+# ファイルコピー
+cp data/processed/submission_ticket016_rhythm.csv experiments/exp004_ticket016_rhythm_periodicity/submission.csv
+cp models/ticket016_rhythm_features_cv_results_20250923_123611.json experiments/exp004_ticket016_rhythm_periodicity/
+cp data/processed/feature_importance_all.csv experiments/exp004_ticket016_rhythm_periodicity/feature_importance.csv
+
+# 実行日時: 2025-09-23 12:36-12:38
+# CV RMSE: 26.4668
+# 予測値範囲: 116.24 - 126.58 (平均: 119.06)
