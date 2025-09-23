@@ -6,6 +6,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import SelectKBest, f_regression, mutual_info_regression
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from sklearn.decomposition import PCA, FastICA
+from sklearn.metrics import explained_variance_score
 from scipy.stats import zscore
 from tqdm import tqdm
 import typer
@@ -851,6 +853,181 @@ def create_rhythm_periodicity_features(df: pd.DataFrame) -> pd.DataFrame:
     return df_features
 
 
+def determine_optimal_components(X: pd.DataFrame, variance_threshold: float = 0.95, max_components: int = None) -> dict:
+    """最適な主成分数を自動選択する。
+
+    Args:
+        X: 特徴量行列
+        variance_threshold: 累積寄与率の閾値（この値以上になる主成分数を選択）
+        max_components: 最大主成分数（指定されない場合は特徴量数の80%）
+
+    Returns:
+        {"n_components": int, "explained_variance_ratio": float, "individual_ratios": list}
+    """
+    logger.info(f"最適主成分数を決定中（累積寄与率閾値: {variance_threshold}）...")
+
+    if max_components is None:
+        max_components = min(len(X.columns), int(len(X.columns) * 0.8))
+
+    # PCAを実行して寄与率を計算
+    pca = PCA(n_components=max_components)
+    pca.fit(X)
+
+    # 累積寄与率を計算
+    cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+
+    # 閾値を超える最初の主成分数を選択
+    optimal_n_components = np.argmax(cumulative_variance >= variance_threshold) + 1
+
+    if optimal_n_components == 1 and cumulative_variance[0] < variance_threshold:
+        # 閾値に達しない場合は80%の主成分数を選択
+        optimal_n_components = max_components
+
+    result = {
+        "n_components": optimal_n_components,
+        "explained_variance_ratio": cumulative_variance[optimal_n_components - 1],
+        "individual_ratios": pca.explained_variance_ratio_[:optimal_n_components].tolist()
+    }
+
+    logger.info(f"最適主成分数: {optimal_n_components}個（累積寄与率: {result['explained_variance_ratio']:.3f}）")
+
+    return result
+
+
+def create_dimensionality_reduction_features(
+    df: pd.DataFrame,
+    apply_pca: bool = True,
+    apply_ica: bool = True,
+    pca_variance_threshold: float = 0.95,
+    ica_components: int = None
+) -> pd.DataFrame:
+    """PCA・ICAによる次元削減特徴量を作成する。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+        apply_pca: PCA変換を適用するかどうか
+        apply_ica: ICA変換を適用するかどうか
+        pca_variance_threshold: PCA主成分数決定の累積寄与率閾値
+        ica_components: ICA成分数（指定されない場合は元特徴量数の50%）
+
+    Returns:
+        次元削減特徴量が追加されたデータフレーム
+    """
+    logger.info("次元削減特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # 元特徴量を特定（ジャンル特徴量とリズム特徴量を除く）
+    original_features = [
+        "RhythmScore", "AudioLoudness", "VocalContent", "AcousticQuality",
+        "InstrumentalScore", "LivePerformanceLikelihood", "MoodScore",
+        "TrackDurationMs", "Energy"
+    ]
+
+    # ジャンル特徴量を特定
+    genre_features = [col for col in df.columns if "genre_score" in col]
+
+    # 元特徴量のPCA変換
+    if apply_pca and len(original_features) > 1:
+        # データフレームから元特徴量を抽出
+        original_data = df_features[original_features].fillna(0)
+
+        # データ標準化
+        scaler = StandardScaler()
+        original_scaled = scaler.fit_transform(original_data)
+
+        # 最適主成分数を決定
+        optimal_info = determine_optimal_components(
+            pd.DataFrame(original_scaled, columns=original_features),
+            variance_threshold=pca_variance_threshold
+        )
+        n_components = optimal_info["n_components"]
+
+        # PCA変換実行
+        pca = PCA(n_components=n_components)
+        original_pca = pca.fit_transform(original_scaled)
+
+        # 主成分特徴量を追加
+        for i in range(n_components):
+            df_features[f"pca_original_pc{i+1}"] = original_pca[:, i]
+
+        logger.info(f"元特徴量PCA変換完了: {n_components}主成分（累積寄与率: {optimal_info['explained_variance_ratio']:.3f}）")
+
+    # ジャンル特徴量のPCA変換
+    if apply_pca and len(genre_features) > 2:
+        # ジャンル特徴量を抽出
+        genre_data = df_features[genre_features].fillna(0)
+
+        # データ標準化
+        scaler_genre = StandardScaler()
+        genre_scaled = scaler_genre.fit_transform(genre_data)
+
+        # 最適主成分数を決定（ジャンル特徴量用）
+        optimal_genre_info = determine_optimal_components(
+            pd.DataFrame(genre_scaled, columns=genre_features),
+            variance_threshold=pca_variance_threshold
+        )
+        n_genre_components = optimal_genre_info["n_components"]
+
+        # PCA変換実行
+        pca_genre = PCA(n_components=n_genre_components)
+        genre_pca = pca_genre.fit_transform(genre_scaled)
+
+        # ジャンル主成分特徴量を追加
+        for i in range(n_genre_components):
+            df_features[f"pca_genre_pc{i+1}"] = genre_pca[:, i]
+
+        logger.info(f"ジャンル特徴量PCA変換完了: {n_genre_components}主成分（累積寄与率: {optimal_genre_info['explained_variance_ratio']:.3f}）")
+
+    # 元特徴量のICA変換
+    if apply_ica and len(original_features) > 1:
+        # ICA成分数を決定（元特徴量数の50%）
+        if ica_components is None:
+            ica_components = max(2, int(len(original_features) * 0.5))
+        else:
+            ica_components = min(ica_components, len(original_features))
+
+        # データ標準化
+        original_data = df_features[original_features].fillna(0)
+        scaler_ica = StandardScaler()
+        original_scaled_ica = scaler_ica.fit_transform(original_data)
+
+        # ICA変換実行
+        ica = FastICA(n_components=ica_components, random_state=42, max_iter=1000)
+        original_ica = ica.fit_transform(original_scaled_ica)
+
+        # 独立成分特徴量を追加
+        for i in range(ica_components):
+            df_features[f"ica_original_ic{i+1}"] = original_ica[:, i]
+
+        logger.info(f"元特徴量ICA変換完了: {ica_components}独立成分")
+
+    # ジャンル特徴量のICA変換
+    if apply_ica and len(genre_features) > 2:
+        # ICA成分数を決定（ジャンル特徴量数の50%）
+        genre_ica_components = max(2, int(len(genre_features) * 0.5))
+
+        # データ標準化
+        genre_data = df_features[genre_features].fillna(0)
+        scaler_ica_genre = StandardScaler()
+        genre_scaled_ica = scaler_ica_genre.fit_transform(genre_data)
+
+        # ICA変換実行
+        ica_genre = FastICA(n_components=genre_ica_components, random_state=42, max_iter=1000)
+        genre_ica = ica_genre.fit_transform(genre_scaled_ica)
+
+        # ジャンル独立成分特徴量を追加
+        for i in range(genre_ica_components):
+            df_features[f"ica_genre_ic{i+1}"] = genre_ica[:, i]
+
+        logger.info(f"ジャンル特徴量ICA変換完了: {genre_ica_components}独立成分")
+
+    n_new_features = len(df_features.columns) - len(df.columns)
+    logger.success(f"次元削減特徴量を作成完了: {n_new_features}個の新特徴量を追加")
+
+    return df_features
+
+
 def evaluate_multicollinearity_impact(
     X_original: pd.DataFrame,
     X_cleaned: pd.DataFrame,
@@ -945,6 +1122,11 @@ def main(
     create_genre: bool = True,
     create_advanced: bool = False,
     create_rhythm: bool = False,
+    create_dimensionality_reduction: bool = False,
+    apply_pca: bool = True,
+    apply_ica: bool = True,
+    pca_variance_threshold: float = 0.95,
+    ica_components: int = None,
     remove_multicollinearity: bool = False,
     multicollinearity_threshold: float = 0.7,
     prioritize_genre_features: bool = True,
@@ -967,6 +1149,11 @@ def main(
         create_genre: 音楽ジャンル推定特徴量を作成するかどうか
         create_advanced: 独立性の高い高次特徴量を作成するかどうか
         create_rhythm: ドラマー視点リズム周期性特徴量を作成するかどうか
+        create_dimensionality_reduction: PCA・ICA次元削減特徴量を作成するかどうか
+        apply_pca: PCA変換を適用するかどうか（次元削減有効時）
+        apply_ica: ICA変換を適用するかどうか（次元削減有効時）
+        pca_variance_threshold: PCA主成分数決定の累積寄与率閾値
+        ica_components: ICA成分数（指定されない場合は元特徴量数の50%）
         remove_multicollinearity: 多重共線性除去を行うかどうか
         multicollinearity_threshold: 多重共線性検出の相関閾値
         prioritize_genre_features: 多重共線性除去時にジャンル特徴量を優先するかどうか
@@ -1020,6 +1207,16 @@ def main(
         # ドラマー視点リズム周期性特徴量の作成
         if create_rhythm:
             enhanced_df = create_rhythm_periodicity_features(enhanced_df)
+
+        # PCA・ICA次元削減特徴量の作成
+        if create_dimensionality_reduction:
+            enhanced_df = create_dimensionality_reduction_features(
+                enhanced_df,
+                apply_pca=apply_pca,
+                apply_ica=apply_ica,
+                pca_variance_threshold=pca_variance_threshold,
+                ica_components=ica_components
+            )
 
         enhanced_datasets[name] = enhanced_df
         logger.info(f"{name}データセット: {enhanced_df.shape[1]}特徴量を生成")
