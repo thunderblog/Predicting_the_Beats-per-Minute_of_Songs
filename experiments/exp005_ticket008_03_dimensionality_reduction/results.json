@@ -1,0 +1,92 @@
+{
+  "experiment_name": "exp005_ticket008_03_dimensionality_reduction",
+  "description": "PCA/ICA次元削減特徴量と多重共線性除去による性能改善実験",
+  "date_created": "2025-09-23",
+  "model_config": {
+    "model_type": "LightGBM",
+    "objective": "regression",
+    "metric": "rmse",
+    "num_leaves": 31,
+    "learning_rate": 0.1,
+    "feature_fraction": 0.9,
+    "n_estimators": 10000,
+    "stopping_rounds": 50
+  },
+  "data_config": {
+    "train_samples": 174722,
+    "test_samples": 174722,
+    "n_features": 26,
+    "cv_folds": 5
+  },
+  "features": {
+    "original_features": [
+      "RhythmScore", "AudioLoudness", "InstrumentalScore",
+      "LivePerformanceLikelihood", "MoodScore", "TrackDurationMs"
+    ],
+    "engineered_features": [
+      "rhythm_energy_ratio", "loudness_vocal_product", "acoustic_instrumental_ratio",
+      "energy_mood_product", "duration_long", "duration_medium", "duration_short",
+      "duration_very_long", "duration_very_short", "max_score"
+    ],
+    "genre_features": [
+      "dance_genre_score", "acoustic_genre_score", "ballad_genre_score",
+      "rock_genre_score", "ambient_genre_score"
+    ],
+    "dimensionality_reduction_features": [
+      "pca_original_pc5", "pca_original_pc6", "pca_original_pc7",
+      "pca_genre_pc3", "ica_original_ic3"
+    ],
+    "feature_selection": "多重共線性除去（相関>0.7）",
+    "scaling": "StandardScaler"
+  },
+  "preprocessing": {
+    "missing_values": "なし",
+    "outlier_handling": "なし",
+    "feature_engineering": "交互作用・時間・統計・ジャンル・次元削減特徴量",
+    "multicollinearity_removal": "29特徴量を除去（55→26特徴量）"
+  },
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 5,
+    "mean_rmse": 26.466768874348606,
+    "std_rmse": 0.06319171140022604,
+    "fold_results": {
+      "fold_1": {"rmse": 26.462449114720776},
+      "fold_2": {"rmse": 26.40932886020296},
+      "fold_3": {"rmse": 26.454098868727424},
+      "fold_4": {"rmse": 26.42116612906598},
+      "fold_5": {"rmse": 26.58680139902588}
+    }
+  },
+  "leaderboard_results": {
+    "submission_date": "2025-09-23",
+    "public_lb_score": 26.38834,
+    "cv_lb_consistency": -0.0784,
+    "cv_lb_diff_percentage": -0.30
+  },
+  "prediction_results": {
+    "ensemble_method": "5-fold平均",
+    "n_models": 5,
+    "test_predictions": {
+      "mean_prediction": 119.06,
+      "min_prediction": 116.17,
+      "max_prediction": 126.00,
+      "prediction_range": 9.83
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": "良好（差-0.08）",
+    "overfitting_indicator": "低（標準偏差0.063）",
+    "feature_efficiency": "高（26特徴量で高性能）"
+  },
+  "submission_info": {
+    "filename": "submission_ticket008_03_dimensionality.csv",
+    "submission_command": "kaggle competitions submit -c playground-series-s5e9 -f submission_ticket008_03_dimensionality.csv -m 'TICKET008-003: PCA/ICA次元削減特徴量'"
+  },
+  "notes": [
+    "次元削減特徴量が効果的に機能",
+    "多重共線性除去により効率的なモデルを実現",
+    "CV-LB一貫性が良好で信頼性の高いモデル",
+    "過去のベストスコアと同等の性能を26特徴量で達成"
+  ]
+}
