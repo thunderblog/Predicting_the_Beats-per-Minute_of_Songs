@@ -6,7 +6,10 @@
       "Bash(for:*)",
       "Bash(do echo \"=== $exp ===\")",
       "Bash(done)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(cp:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)"
     ]
   },
   "outputStyle": "Learning"

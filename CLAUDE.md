@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 開発環境
+- **OS**: Windows 11
+- **プラットフォーム**: win32
+- **Python**: ~3.10.0
+- **シェル**: PowerShell/Command Prompt
+- **パス区切り**: バックスラッシュ（\）使用
+
+### 環境固有の考慮事項
+- **ファイルコピー**: `copy` (Windows) の代わりに `cp` (Unix) を使用
+- **パス指定**: Windows形式 `C:\Users\...` とUnix形式 `/c/Users/...` の混在に注意
+- **改行コード**: CRLF (Windows) vs LF (Unix) の違いを考慮
+- **コマンドライン**: PowerShellとCommand Promptの両方で動作するよう配慮
+
 ## 言語とコミュニケーション
 - **すべてのレスポンスは日本語で行う**
 - コメントや変数名は英語を使用
@@ -21,9 +34,29 @@ This project uses Make for common tasks:
 
 Alternative direct commands:
 - `python -m pytest tests` - Run tests directly
-- `ruff format` - Format code 
+- `ruff format` - Format code
 - `ruff check --fix` - Fix linting issues
 - `ruff format --check && ruff check` - Check formatting and linting
+
+### Windows環境でのコマンド実行
+```bash
+# ディレクトリ移動
+cd experiments\exp005_ticket008_03_dimensionality_reduction
+
+# ファイルコピー（Bashでcp、Windows Commandでcopy）
+cp models\*.json experiments\exp005_ticket008_03_dimensionality_reduction\
+copy models\*.json experiments\exp005_ticket008_03_dimensionality_reduction\
+
+# ファイル一覧確認
+ls data\processed\*.csv          # PowerShell/Bash
+dir data\processed\*.csv         # Command Prompt
+
+# Kaggle提出
+kaggle competitions submit -c playground-series-s5e9 -f "data\processed\submission.csv" -m "提出メッセージ"
+
+# 自動提出スクリプト
+python scripts\submit_experiment.py --experiment-name exp005_ticket008_03_dimensionality_reduction
+```
 
 ## Project Architecture
 
