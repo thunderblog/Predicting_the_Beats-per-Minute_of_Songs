@@ -9,7 +9,7 @@ python -m src.features --create-genre --remove-multicollinearity --create-advanc
 python -m src.modeling.train --train-path=data/processed/train_features.csv --val-path=data/processed/validation_features.csv --exp-name=advanced_features_lgb
 
 # 3. 予測実行
-python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=advanced_features_lgb --output-path=data/processed/submission_advanced_features.csv
+python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=advanced_features_lgb --output-path=data/processed/submission_advanced_features_0923.csv
 
 === 段階的実行（デバッグ・検証用） ===
 
