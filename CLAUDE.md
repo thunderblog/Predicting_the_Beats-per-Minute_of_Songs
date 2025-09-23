@@ -575,3 +575,79 @@ experiments/
       - 時間軸整合性検証（楽曲長とBPMの妥当性）
       - BPMレンジ別典型パターンのマッチング
     - 期待効果: ドラマー直感に基づく高精度BPM予測、実用的音楽知識の数値化
+
+### 第12段階: Kaggleサンプルコード統合（高優先度）🏆
+17. **[TICKET-017] 包括的特徴量エンジニアリング統合** 🏆 **最高優先度**
+    - ファイル: `src/features.py` (機能大幅拡張)
+    - 背景: Kaggleサンプルコード（RMSE: 26.38）の手法統合による性能向上
+    - ベンチマーク: 現在ベースライン（26.47）から-0.09改善を目標
+    - 期待効果: 系統的特徴量生成による予測精度の根本的向上
+
+    **17.1 [TICKET-017-01] 包括的交互作用特徴量の実装**
+    - 機能: `create_comprehensive_interaction_features()` 関数追加
+    - 要件:
+      - 全数値特徴量ペア（9個）の積特徴量（36個）
+      - 全特徴量の二乗項（9個）
+      - 全ペアの比率特徴量（ゼロ除算対策付き）
+      - itertools.combinationsによる系統的生成
+    - 実装詳細:
+      - 基本特徴量: ['RhythmScore', 'AudioLoudness', 'VocalContent', 'AcousticQuality', 'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore', 'TrackDurationMs', 'Energy']
+      - 命名規則: `{col1}_x_{col2}`, `{col1}_squared`, `{col1}_div_{col2}`
+      - ゼロ除算回避: 分母に1e-6加算
+
+    **17.2 [TICKET-017-02] 対数変換特徴量の実装**
+    - 機能: `create_log_features()` 関数追加
+    - 要件:
+      - 全数値特徴量のlog1p変換（AudioLoudnessを除く8個）
+      - log変換特徴量同士の組み合わせ特徴量
+      - 対数スケールでの正規分布化効果
+    - 実装詳細:
+      - `log1p_{feature_name}` 形式でlog1p変換
+      - 負値対応のためnp.log1p()使用
+      - 分布の歪み補正による予測精度向上
+
+    **17.3 [TICKET-017-03] ビニング・カテゴリ特徴量の実装**
+    - 機能: `create_binning_features()` 関数追加
+    - 要件:
+      - 各数値特徴量の7分位（septile）カテゴリ化
+      - 各数値特徴量の10分位（decile）カテゴリ化
+      - log変換特徴量の5分位（quintile）カテゴリ化
+      - カテゴリ別BPM平均による統計特徴量
+    - 実装詳細:
+      - `pd.cut()`による分位数分割
+      - `groupby().mean()`によるカテゴリ統計特徴量
+      - 離散化による非線形パターン捕捉
+
+18. **[TICKET-018] 高性能アンサンブルシステム実装** 🏆 **最高優先度**
+    - 新規ファイル: `src/modeling/ensemble_models.py`
+    - 背景: サンプルコードの3モデルアンサンブル（XGB+LGBM+CatBoost）の統合
+    - 目標: 単一モデル限界突破による性能向上
+
+    **18.1 [TICKET-018-01] XGBoost・CatBoost回帰モデルの実装**
+    - 要件:
+      - XGBRegressor実装（CUDA対応、最適化済みパラメータ）
+      - CatBoostRegressor実装（カテゴリ特徴量自動処理）
+      - 既存LightGBMとの統一クロスバリデーション
+    - 実装詳細:
+      - サンプルコードのハイパーパラメータ移植
+      - カテゴリ特徴量の自動検出・処理
+      - 5フォールドCV統一による公平比較
+
+    **18.2 [TICKET-018-02] Optuna重み最適化システム**
+    - 機能: `optimize_ensemble_weights()` 関数追加
+    - 要件:
+      - 3モデル出力の最適重み探索（ベイジアン最適化）
+      - Out-of-Fold予測によるアンサンブル最適化
+      - 重み制約（合計=1）下での最適化
+    - 実装詳細:
+      - Optuna Studyによる500トライアル最適化
+      - `suggest_float()`による連続パラメータ探索
+      - RMSE最小化目的関数
+
+19. **[TICKET-019] 実験管理システムの実装**
+    - 新規ファイル: `scripts/kaggle_experiment_runner.py`
+    - 要件:
+      - TICKET-017・018統合実験の自動実行
+      - 性能比較レポート自動生成
+      - Kaggle提出自動化
+    - 期待効果: ベースライン26.47→目標26.38（-0.09改善）の検証
