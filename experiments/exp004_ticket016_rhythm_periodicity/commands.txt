@@ -39,14 +39,8 @@ cp data/processed/feature_importance_all.csv experiments/exp004_ticket016_rhythm
 
 # 実行日時: 2025-09-23
 # 実行者: Claude Code
-# ブランチ: feature/ticket-016/rhythm-periodicitypython -m src.modeling.train --train-path=data/processed/train_features.csv --val-path=data/processed/validation_features.csv --exp-name=ticket016_rhythm_features --use-cross-validation --n-folds=5
-python -m src.modeling.predict --test-features-path=data/processed/test_features.csv --exp-name=ticket016_rhythm_features --output-path=data/processed/submission_ticket016_rhythm.csv
+# ブランチ: feature/ticket-016/rhythm-periodicity
 
-# ファイルコピー
-cp data/processed/submission_ticket016_rhythm.csv experiments/exp004_ticket016_rhythm_periodicity/submission.csv
-cp models/ticket016_rhythm_features_cv_results_20250923_123611.json experiments/exp004_ticket016_rhythm_periodicity/
-cp data/processed/feature_importance_all.csv experiments/exp004_ticket016_rhythm_periodicity/feature_importance.csv
 
-# 実行日時: 2025-09-23 12:36-12:38
-# CV RMSE: 26.4668
-# 予測値範囲: 116.24 - 126.58 (平均: 119.06)
+
+python -m src.features --create-interactions --create-duration --create-statistical --create-genre --create-advanced --create-rhythm --remove-multicollinearity --multicollinearity-threshold=0.7 --prioritize-genre-features --apply-scaling --scaler-type=standard
