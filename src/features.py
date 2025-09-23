@@ -11,6 +11,7 @@ from sklearn.metrics import explained_variance_score
 from scipy.stats import zscore
 from tqdm import tqdm
 import typer
+from itertools import combinations
 
 from src.config import PROCESSED_DATA_DIR
 
@@ -47,6 +48,75 @@ def create_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 複雑な交互作用
     df_features["rhythm_mood_energy"] = df["RhythmScore"] * df["MoodScore"] * df["Energy"]
+
+    return df_features
+
+
+def create_comprehensive_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Kaggleサンプルコードの手法による包括的交互作用特徴量を作成する。
+
+    全数値特徴量ペアの積、二乗項、比率特徴量を系統的に生成して
+    特徴量空間を大幅に拡張し、非線形関係を捕捉する。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        包括的交互作用特徴量が追加されたデータフレーム
+    """
+    logger.info("包括的交互作用特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # 基本数値特徴量を定義（サンプルコードと同じ）
+    num_cols = [
+        'RhythmScore', 'AudioLoudness', 'VocalContent', 'AcousticQuality',
+        'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore',
+        'TrackDurationMs', 'Energy'
+    ]
+
+    # 存在する特徴量のみを使用
+    available_num_cols = [col for col in num_cols if col in df.columns]
+
+    if not available_num_cols:
+        logger.warning("数値特徴量が見つかりません")
+        return df_features
+
+    logger.info(f"処理対象数値特徴量: {len(available_num_cols)}個")
+
+    # 新特徴量を格納する辞書
+    new_features = {}
+
+    # 1. 全ペア組み合わせの積特徴量と二乗項を生成
+    logger.info("積特徴量と二乗項を生成中...")
+    for i in range(len(available_num_cols)):
+        for j in range(i, len(available_num_cols)):
+            col1 = available_num_cols[i]
+            col2 = available_num_cols[j]
+
+            # 積特徴量 (i=jの場合は二乗項)
+            new_features[f'{col1}_x_{col2}'] = df[col1] * df[col2]
+
+            # 二乗項は別途明示的に作成
+            if i == j:
+                new_features[f'{col1}_squared'] = df[col1] * df[col1]
+
+    # 2. 全ペア組み合わせの比率特徴量を生成
+    logger.info("比率特徴量を生成中...")
+    for col1 in available_num_cols:
+        for col2 in available_num_cols:
+            if col1 != col2:  # 自分自身での除算は除外
+                # ゼロ除算対策で分母に1e-6を加算
+                new_features[f'{col1}_div_{col2}'] = df[col1] / (df[col2] + 1e-6)
+
+    # 3. 新特徴量を一括で追加（DataFrameの断片化を防ぐ）
+    logger.info("新特徴量を一括追加中...")
+    new_features_df = pd.DataFrame(new_features, index=df.index)
+    df_features = pd.concat([df_features, new_features_df], axis=1)
+
+    feature_count = len(new_features)
+
+    logger.success(f"包括的交互作用特徴量を作成完了: {feature_count}個の新特徴量を追加")
 
     return df_features
 
@@ -1117,6 +1187,7 @@ def main(
     test_path: Path = PROCESSED_DATA_DIR / "test.csv",
     output_dir: Path = PROCESSED_DATA_DIR,
     create_interactions: bool = True,
+    create_comprehensive_interactions: bool = False,
     create_duration: bool = True,
     create_statistical: bool = True,
     create_genre: bool = True,
@@ -1144,6 +1215,7 @@ def main(
         test_path: テストデータCSVのパス
         output_dir: 拡張特徴量を保存するディレクトリ
         create_interactions: 交互作用特徴量を作成するかどうか
+        create_comprehensive_interactions: 包括的交互作用特徴量を作成するかどうか（Kaggleサンプルコード手法）
         create_duration: 時間ベースの特徴量を作成するかどうか
         create_statistical: 統計的特徴量を作成するかどうか
         create_genre: 音楽ジャンル推定特徴量を作成するかどうか
@@ -1187,6 +1259,10 @@ def main(
         # 交互作用特徴量の作成
         if create_interactions:
             enhanced_df = create_interaction_features(enhanced_df)
+
+        # 包括的交互作用特徴量の作成（Kaggleサンプルコード手法）
+        if create_comprehensive_interactions:
+            enhanced_df = create_comprehensive_interaction_features(enhanced_df)
 
         # 時間特徴量の作成
         if create_duration:
