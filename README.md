@@ -63,70 +63,70 @@ make test          # テスト実行
 make clean         # 一時ファイル削除
 ```
 
-## 📁 Project Organization
+## 📁 プロジェクト構成
 
 ```
-├── LICENSE            <- Open-source license if one is chosen
-├── Makefile           <- Makefile with convenience commands like `make data` or `make train`
-├── README.md          <- The top-level README for developers using this project
-├── CLAUDE.md          <- Claude Code assistant project instructions
+├── LICENSE            <- オープンソースライセンス
+├── Makefile           <- make data や make train などの便利コマンド
+├── README.md          <- 開発者向けトップレベルREADME
+├── CLAUDE.md          <- Claude Code アシスタント用プロジェクト指示書
 ├── data
-│   ├── external       <- Data from third party sources
-│   ├── interim        <- Intermediate data that has been transformed
-│   ├── processed      <- The final, canonical data sets for modeling
-│   └── raw            <- The original, immutable data dump
+│   ├── external       <- サードパーティからのデータ
+│   ├── interim        <- 変換済み中間データ
+│   ├── processed      <- モデリング用最終データセット
+│   └── raw            <- 元の不変データダンプ
 │
-├── docs               <- Documentation files and usage guides
-│   ├── KAGGLE_SUBMIT_GUIDE.md     <- Kaggle submission guide
-│   ├── TICKET-008_USAGE_GUIDE.md  <- Genre features usage guide
-│   └── TICKET-008-01_USAGE_GUIDE.md <- Multicollinearity removal guide
+├── docs               <- ドキュメントファイルと使用ガイド
+│   ├── KAGGLE_SUBMIT_GUIDE.md     <- Kaggle提出ガイド
+│   ├── TICKET-008_USAGE_GUIDE.md  <- ジャンル特徴量使用ガイド
+│   └── TICKET-008-01_USAGE_GUIDE.md <- 多重共線性除去ガイド
 │
-├── experiments        <- 🧪 Experiment management system
-│   ├── exp01_baseline_lgb/         <- Baseline LightGBM experiment
-│   ├── exp02_multicollinearity_removal/ <- Feature optimization experiments
-│   ├── exp03_advanced_features/    <- Advanced feature engineering
-│   ├── exp004_ticket016_rhythm_periodicity/ <- Rhythm-based features
-│   ├── exp005_ticket008_03_dimensionality_reduction/ <- PCA features
-│   └── experiment_results.csv     <- Consolidated experiment results
+├── experiments        <- 🧪 実験管理システム
+│   ├── exp01_baseline_lgb/         <- ベースラインLightGBM実験
+│   ├── exp02_multicollinearity_removal/ <- 特徴量最適化実験
+│   ├── exp03_advanced_features/    <- 高度な特徴量エンジニアリング
+│   ├── exp004_ticket016_rhythm_periodicity/ <- リズムベース特徴量
+│   ├── exp005_ticket008_03_dimensionality_reduction/ <- PCA特徴量
+│   └── experiment_results.csv     <- 統合実験結果
 │
-├── models             <- Trained and serialized models, model predictions
+├── models             <- 訓練済みモデル、予測結果
 │
-├── notebooks          <- Jupyter notebooks for exploratory analysis
+├── notebooks          <- 探索的分析用Jupyterノートブック
 │
-├── pyproject.toml     <- Project configuration file with package metadata
+├── pyproject.toml     <- パッケージメタデータ付きプロジェクト設定ファイル
 │
-├── scripts            <- 🤖 Automation and utility scripts
-│   ├── my_config.py           <- Project configuration settings
-│   ├── submit.py              <- Kaggle submission script
-│   ├── submit_experiment.py   <- Automated experiment runner
-│   └── evaluate_genre_features.py <- Feature evaluation utilities
+├── scripts            <- 🤖 自動化・ユーティリティスクリプト
+│   ├── my_config.py           <- プロジェクト設定
+│   ├── submit.py              <- Kaggle提出スクリプト
+│   ├── submit_experiment.py   <- 自動実験実行ツール
+│   └── evaluate_genre_features.py <- 特徴量評価ユーティリティ
 │
-├── references         <- Data dictionaries, manuals, and explanatory materials
+├── references         <- データ辞書、マニュアル、説明資料
 │
-├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-│   └── figures        <- Generated graphics and figures to be used in reporting
+├── reports            <- HTML、PDF、LaTeX等の生成分析結果
+│   └── figures        <- レポート用生成グラフィック・図表
 │
-├── requirements.txt   <- The requirements file for reproducing the analysis environment
+├── requirements.txt   <- 分析環境再現用要件ファイル
 │
-├── tests              <- Test files for code quality assurance
+├── tests              <- コード品質保証用テストファイル
 │
-└── src                <- 🎼 Source code for use in this project
+└── src                <- 🎼 このプロジェクト用ソースコード
     │
-    ├── __init__.py             <- Makes src a Python module
+    ├── __init__.py             <- srcをPythonモジュール化
     │
-    ├── config.py               <- Store useful variables and configuration
+    ├── config.py               <- 有用な変数と設定の保存
     │
-    ├── dataset.py              <- Scripts to process and split data (CLI with typer)
+    ├── dataset.py              <- データ処理・分割スクリプト (typer CLI)
     │
-    ├── features.py             <- Feature engineering and selection (CLI with typer)
+    ├── features.py             <- 特徴量エンジニアリング・選択 (typer CLI)
     │                              [包含: ジャンル特徴量, 次元削減, リズム周期性]
     │
     ├── modeling
     │   ├── __init__.py
-    │   ├── predict.py          <- Code to run model inference (CLI with typer)
-    │   └── train.py            <- Code to train models (CLI with typer)
+    │   ├── predict.py          <- モデル推論実行コード (typer CLI)
+    │   └── train.py            <- モデル訓練コード (typer CLI)
     │
-    └── plots.py                <- Code to create visualizations (CLI with typer)
+    └── plots.py                <- 可視化作成コード (typer CLI)
 ```
 
 ## 🔬 Development Workflow
