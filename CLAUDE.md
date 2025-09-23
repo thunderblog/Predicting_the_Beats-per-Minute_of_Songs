@@ -469,12 +469,59 @@ experiments/
       - 楽曲構造推定特徴量（イントロ・サビ・アウトロ推定）
 
 ### 第7段階: モデル多様化とアンサンブル
-11. **[TICKET-011] 複数アルゴリズムモデルの実装**
-    - 新規ファイル: `src/modeling/models.py`
+11. **[TICKET-011] アルゴリズム多様化による性能向上**
+    - 背景: LightGBMベースラインの限界突破を目指す
+    - 方針: GBDT系とニューラルネットワーク系の組み合わせで多様性確保
+
+    **11.1 [TICKET-011-01] XGBoost回帰モデルの実装**
+    - ファイル: `src/modeling/train.py` (アルゴリズム選択機能拡張)
+    - 優先度: 中（GBDT比較ベースライン確立）
     - 要件:
-      - XGBoost、CatBoost、Random Forest実装
-      - ニューラルネットワーク（MLP、TabNet）実装
-      - 各モデルの最適ハイパーパラメータ探索
+      - XGBoostRegressor実装とハイパーパラメータ調整
+      - LightGBMとの性能・特徴量重要度比較
+      - 既存CVパイプライン流用による効率実装
+
+    **11.2 [TICKET-011-02] CatBoost回帰モデルの実装**
+    - ファイル: `src/modeling/train.py` (アルゴリズム選択機能拡張)
+    - 優先度: 低（GBDT系類似性能予想）
+    - 要件:
+      - CatBoostRegressor実装
+      - カテゴリ特徴量自動処理活用
+      - GBDT系3種比較分析
+
+    **11.3 [TICKET-011-03] Random Forest回帰モデルの実装**
+    - ファイル: `src/modeling/train.py` (アルゴリズム選択機能拡張)
+    - 優先度: 低（アンサンブルベース確立）
+    - 要件:
+      - RandomForestRegressor実装
+      - 木の多様性確保（アンサンブル下地）
+      - 特徴量重要度の安定性分析
+
+    **11.4 [TICKET-011-04] Multi-Layer Perceptron (MLP) 実装** 🧠 **高優先度**
+    - 新規ファイル: `src/modeling/neural_models.py`
+    - 優先度: 最高（根本的な学習メカニズム差による性能向上期待）
+    - 要件:
+      - PyTorch/TensorFlow基盤のMLP回帰モデル
+      - 表形式データ向け最適化（BatchNorm、Dropout）
+      - 特徴量スケーリング統合パイプライン
+      - Early Stopping・学習率スケジューリング
+
+    **11.5 [TICKET-011-05] TabNet実装** 🧠 **高優先度**
+    - 新規ファイル: `src/modeling/tabnet_model.py`
+    - 優先度: 高（表形式データ特化の革新的アーキテクチャ）
+    - 要件:
+      - Google TabNet実装（pytorch-tabnet使用）
+      - 特徴量選択機能内蔵活用
+      - 解釈可能性分析（Attention weights）
+      - GPU/CPU両対応の訓練パイプライン
+
+    **11.6 [TICKET-011-06] Neural Oblivious Decision Trees (NODE) 実装**
+    - 新規ファイル: `src/modeling/node_model.py`
+    - 優先度: 中（実験的手法、決定木×NN融合）
+    - 要件:
+      - NODE実装（決定木構造のニューラルネット）
+      - 勾配ブースティングとNNの利点融合
+      - 解釈性とパフォーマンスの両立検証
 
 12. **[TICKET-012] アンサンブル手法の実装**
     - 新規ファイル: `src/modeling/ensemble.py`
