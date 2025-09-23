@@ -221,3 +221,5 @@ experiments/exp02_multicollinearity_removal/submission.csv
 # - experiments/*/results.json (実験メタデータ)
 # - experiments/*/README.md (実験レポート)
 # - experiments/*/submit_commands.txt (提出コマンド)
+
+sample_code/*

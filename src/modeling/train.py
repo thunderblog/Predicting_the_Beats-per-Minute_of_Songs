@@ -26,8 +26,9 @@ def main(
     use_cross_validation: bool = True,
     n_folds: int = 5,
     exp_name: str = config.exp_name,
+    model_type: str = "lightgbm",  # New: lightgbm, mlp_standard, mlp_simple
 ):
-    """LightGBM回帰モデルの訓練を実行する。
+    """回帰モデルの訓練を実行する。
 
     Args:
         train_path: 訓練データCSVのパス
@@ -36,8 +37,9 @@ def main(
         use_cross_validation: クロスバリデーションを使用するかどうか
         n_folds: クロスバリデーションのフォールド数
         exp_name: 実験名（モデル保存時の識別用）
+        model_type: モデルタイプ (lightgbm, mlp_standard, mlp_simple)
     """
-    logger.info(f"LightGBM回帰モデルの訓練を開始 (実験名: {exp_name})...")
+    logger.info(f"{model_type}回帰モデルの訓練を開始 (実験名: {exp_name})...")
 
     # モデル保存ディレクトリを作成
     model_dir.mkdir(exist_ok=True, parents=True)
@@ -53,26 +55,34 @@ def main(
 
     logger.info(f"特徴量数: {len(feature_cols)}, サンプル数: {len(X_train)}")
 
-    if use_cross_validation:
-        # クロスバリデーション実行
-        cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds)
-
-        # 結果の保存
-        save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols)
+    # MLP models vs LightGBM
+    if model_type.startswith("mlp"):
+        # MLP訓練（内部でvalidation splitを実行）
+        results = train_mlp_model(X_train, y_train, model_type, exp_name)
+        logger.success(f"MLP回帰モデルの訓練が完了しました。検証RMSE: {results['cv_rmse']:.4f}")
 
     else:
-        # 単一モデル訓練（検証データ使用）
-        logger.info(f"検証データを読み込み中: {val_path}")
-        val_df = pd.read_csv(val_path)
-        X_val = val_df[feature_cols]
-        y_val = val_df[config.target]
+        # LightGBM訓練（既存ロジック）
+        if use_cross_validation:
+            # クロスバリデーション実行
+            cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds)
 
-        model, train_score, val_score = train_single_model(X_train, y_train, X_val, y_val)
+            # 結果の保存
+            save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols)
 
-        # モデルと結果の保存
-        save_single_model(model, train_score, val_score, model_dir, exp_name, feature_cols)
+        else:
+            # 単一モデル訓練（検証データ使用）
+            logger.info(f"検証データを読み込み中: {val_path}")
+            val_df = pd.read_csv(val_path)
+            X_val = val_df[feature_cols]
+            y_val = val_df[config.target]
 
-    logger.success("LightGBM回帰モデルの訓練が完了しました。")
+            model, train_score, val_score = train_single_model(X_train, y_train, X_val, y_val)
+
+            # モデルと結果の保存
+            save_single_model(model, train_score, val_score, model_dir, exp_name, feature_cols)
+
+        logger.success("LightGBM回帰モデルの訓練が完了しました。")
 
 
 def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5):
@@ -289,6 +299,96 @@ def save_single_model(
 
     logger.success(f"モデル結果を保存: {results_path}")
     logger.info(f"モデル保存完了: {model_path}")
+
+
+def train_mlp_model(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_type: str = "mlp_standard",
+    exp_name: str = "mlp_experiment"
+) -> dict:
+    """
+    MLP回帰モデルの訓練を実行する。
+
+    Args:
+        X_train: 訓練特徴量データ
+        y_train: 訓練ターゲットデータ
+        model_type: MLPモデルタイプ ("mlp_standard", "mlp_simple")
+        exp_name: 実験名
+
+    Returns:
+        訓練結果の辞書
+    """
+    from .neural_trainer import NeuralTrainer, TrainingConfig
+    from .data_loaders import BPMDataProcessor
+    import torch
+
+    logger.info(f"MLP回帰モデルの訓練を開始 (タイプ: {model_type})...")
+
+    # Create DataFrame for processing
+    train_df = X_train.copy()
+    train_df[config.target] = y_train
+
+    # Setup neural network configuration
+    nn_config = TrainingConfig(
+        model_type="standard" if model_type == "mlp_standard" else "simple",
+        epochs=100,
+        batch_size=512,
+        learning_rate=1e-3,
+        patience=15,
+        scaler_type="standard",
+        device="auto"
+    )
+
+    # Prepare data
+    processor = BPMDataProcessor(
+        scaler_type=nn_config.scaler_type,
+        batch_size=nn_config.batch_size,
+        validation_size=0.2,
+        device=nn_config.device
+    )
+
+    data_dict = processor.prepare_data(train_df, target_col=config.target)
+
+    # Train model
+    trainer = NeuralTrainer(nn_config)
+    training_results = trainer.train(
+        data_dict["train_loader"],
+        data_dict["val_loader"]
+    )
+
+    # Create timestamp for file naming
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Save model
+    model_path = MODELS_DIR / f"{exp_name}_{model_type}_{timestamp}.pth"
+    trainer.save_model(model_path)
+
+    # Prepare results
+    results = {
+        "experiment_name": exp_name,
+        "model_type": model_type,
+        "timestamp": timestamp,
+        "cv_rmse": training_results["best_val_rmse"],
+        "train_rmse": training_results["final_train_rmse"],
+        "training_time_minutes": training_results["training_time_minutes"],
+        "epochs_trained": training_results["epochs_trained"],
+        "feature_count": data_dict["input_dim"],
+        "train_samples": data_dict["train_size"],
+        "val_samples": data_dict["val_size"],
+        "model_path": str(model_path),
+        "config": training_results["config"]
+    }
+
+    # Save results as JSON
+    results_path = MODELS_DIR / f"{exp_name}_{model_type}_results_{timestamp}.json"
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    logger.success(f"MLP訓練完了. 検証RMSE: {results['cv_rmse']:.4f}")
+    logger.info(f"結果保存: {results_path}")
+
+    return results
 
 
 if __name__ == "__main__":
