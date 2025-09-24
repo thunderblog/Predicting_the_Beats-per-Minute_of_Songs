@@ -536,14 +536,32 @@ def analyze_feature_importance(
     f_selector.fit(X_filtered, y)
     f_scores = f_selector.scores_
 
-    # 3. 相互情報量による重要度
-    mi_selector = SelectKBest(score_func=mutual_info_regression, k="all")
-    mi_selector.fit(X_filtered, y)
+    # 3. 相互情報量による重要度（サンプリングで高速化）
+    if len(X_filtered) > 10000:
+        # 大きなデータセットの場合はサンプリング
+        sample_idx = np.random.choice(len(X_filtered), 10000, replace=False)
+        X_sample = X_filtered.iloc[sample_idx]
+        y_sample = y.iloc[sample_idx]
+        mi_selector = SelectKBest(score_func=mutual_info_regression, k="all")
+        mi_selector.fit(X_sample, y_sample)
+        logger.info(f"相互情報量計算: {len(X_sample)}サンプルでサンプリング実行")
+    else:
+        mi_selector = SelectKBest(score_func=mutual_info_regression, k="all")
+        mi_selector.fit(X_filtered, y)
     mi_scores = mi_selector.scores_
 
-    # 4. Random Forestによる重要度
-    rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-    rf.fit(X_filtered, y)
+    # 4. Random Forestによる重要度（軽量化）
+    if len(X_filtered) > 10000:
+        # 大きなデータセットの場合はサンプリング + 軽量パラメータ
+        sample_idx = np.random.choice(len(X_filtered), 10000, replace=False)
+        X_sample = X_filtered.iloc[sample_idx]
+        y_sample = y.iloc[sample_idx]
+        rf = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, max_depth=10)
+        rf.fit(X_sample, y_sample)
+        logger.info(f"Random Forest訓練: {len(X_sample)}サンプルでサンプリング実行")
+    else:
+        rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        rf.fit(X_filtered, y)
     rf_importances = rf.feature_importances_
 
     # 結果をDataFrameにまとめる
