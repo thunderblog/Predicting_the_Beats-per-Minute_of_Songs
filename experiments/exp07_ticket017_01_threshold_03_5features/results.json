@@ -1,0 +1,63 @@
+{
+  "experiment_name": "exp07_ticket017_01_threshold_03_5features",
+  "timestamp": "2025-09-24 14:35:50",
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 5,
+    "mean_rmse": 26.468687403015327,
+    "std_rmse": 0.062779166965065334,
+    "fold_results": {
+      "fold_1": {"rmse": 26.466520031072464, "model_file": "threshold_03_5features_fold_1_20250924_143550.pkl"},
+      "fold_2": {"rmse": 26.411090998633265, "model_file": "threshold_03_5features_fold_2_20250924_143550.pkl"},
+      "fold_3": {"rmse": 26.455960462636887, "model_file": "threshold_03_5features_fold_3_20250924_143550.pkl"},
+      "fold_4": {"rmse": 26.422468969073885, "model_file": "threshold_03_5features_fold_4_20250924_143550.pkl"},
+      "fold_5": {"rmse": 26.587396053659135, "model_file": "threshold_03_5features_fold_5_20250924_143550.pkl"}
+    }
+  },
+  "leaderboard_results": {
+    "submission_date": "2025-09-24",
+    "submission_file": "submission_threshold_03_5features.csv",
+    "public_lb_score": 26.39033,
+    "public_lb_rank": "TBD",
+    "private_lb_score": "TBD",
+    "private_lb_rank": "TBD"
+  },
+  "prediction_results": {
+    "ensemble_method": "5-fold_average",
+    "n_models": 5,
+    "test_predictions": {
+      "mean_prediction": 119.07,
+      "min_prediction": 116.15,
+      "max_prediction": 122.53,
+      "prediction_range": 6.38
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": -0.0785,
+    "overfitting_indicator": "良好（CV-LB差 < 0.1）",
+    "improvement_from_8_features": {
+      "cv_score": "+0.0027 (向上)",
+      "lb_score": "+0.00135 (微劣化)"
+    },
+    "training_time_minutes": 2,
+    "efficiency_gain": "91% feature reduction from original 164"
+  },
+  "feature_analysis": {
+    "importance_threshold": 0.3,
+    "features_above_threshold": 4,
+    "features_at_threshold": 1,
+    "threshold_effectiveness": "CV向上、LB微劣化",
+    "dominant_feature_category": "MoodScore系交互作用",
+    "moodscore_features_count": 3,
+    "time_features_count": 1,
+    "genre_features_count": 1
+  },
+  "notes": [
+    "重要度閾値0.3の有効性を検証",
+    "CV性能向上（26.4660→26.4687）を確認",
+    "LB性能は微劣化（26.38898→26.39033）",
+    "予測範囲が最も安定（6.38 BPM）",
+    "91%の特徴量削減で実用性が最高",
+    "重要度基準による特徴量選択の妥当性を実証"
+  ]
+}

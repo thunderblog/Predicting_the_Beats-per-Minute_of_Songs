@@ -1,0 +1,51 @@
+{
+  "experiment_name": "exp06_ticket017_01_ultra_selective_8features",
+  "description": "TICKET-017-01 超選択8特徴量版 - 包括的交互作用特徴量から最重要8個を選択",
+  "date_created": "2025-09-24",
+  "parent_experiment": "exp05_ticket017_01_comprehensive",
+  "model_config": {
+    "model_type": "LightGBM",
+    "objective": "regression",
+    "metric": "rmse",
+    "num_leaves": 31,
+    "learning_rate": 0.1,
+    "feature_fraction": 0.9,
+    "n_estimators": 10000,
+    "early_stopping_rounds": 50
+  },
+  "data_config": {
+    "train_samples": 419331,
+    "test_samples": 174722,
+    "n_features": 8,
+    "cv_folds": 5,
+    "cv_strategy": "KFold"
+  },
+  "features": {
+    "feature_selection": "ultra_selective_top_8",
+    "selected_features": [
+      "RhythmScore_x_MoodScore",
+      "RhythmScore_x_TrackDurationMs",
+      "VocalContent_x_MoodScore",
+      "VocalContent_x_TrackDurationMs",
+      "MoodScore_x_MoodScore",
+      "MoodScore_squared",
+      "MoodScore_x_TrackDurationMs",
+      "ballad_genre_score"
+    ],
+    "feature_importance_methods": [
+      "f_score",
+      "mutual_info",
+      "rf_importance",
+      "correlation"
+    ],
+    "scaling": "StandardScaler"
+  },
+  "preprocessing": {
+    "comprehensive_interactions": true,
+    "total_generated_features": 164,
+    "feature_reduction_ratio": 0.84,
+    "feature_selection_strategy": "combined_importance_ranking",
+    "outlier_handling": "none",
+    "missing_values": "none"
+  }
+}

@@ -10,7 +10,8 @@
       "Bash(cp:*)",
       "Bash(git add:*)",
       "Bash(git rm:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(copy \"data\\processed\\submission_ultra_selective_8features.csv\" \"experiments\\exp06_ticket017_01_ultra_selective_8features\"\")"
     ]
   },
   "outputStyle": "Learning"

@@ -1,0 +1,58 @@
+{
+  "experiment_name": "exp07_ticket017_01_threshold_03_5features",
+  "description": "TICKET-017-01 重要度閾値0.3以上 - 5特徴量による超効率モデル",
+  "date_created": "2025-09-24",
+  "parent_experiment": "exp06_ticket017_01_ultra_selective_8features",
+  "threshold_concept": {
+    "importance_threshold": 0.3,
+    "rationale": "重要度0.3以上の特徴量のみ使用することで過学習を防止し汎化性能を向上",
+    "excluded_features": [
+      "MoodScore_squared",
+      "MoodScore_x_MoodScore",
+      "VocalContent_x_TrackDurationMs"
+    ]
+  },
+  "model_config": {
+    "model_type": "LightGBM",
+    "objective": "regression",
+    "metric": "rmse",
+    "num_leaves": 31,
+    "learning_rate": 0.1,
+    "feature_fraction": 0.9,
+    "n_estimators": 10000,
+    "early_stopping_rounds": 50
+  },
+  "data_config": {
+    "train_samples": 419331,
+    "test_samples": 174722,
+    "n_features": 5,
+    "cv_folds": 5,
+    "cv_strategy": "KFold"
+  },
+  "features": {
+    "feature_selection": "importance_threshold_0.3",
+    "selected_features": [
+      "MoodScore_x_TrackDurationMs",
+      "RhythmScore_x_MoodScore",
+      "ballad_genre_score",
+      "VocalContent_x_MoodScore",
+      "RhythmScore_x_TrackDurationMs"
+    ],
+    "feature_importance_values": {
+      "MoodScore_x_TrackDurationMs": 0.716,
+      "RhythmScore_x_MoodScore": 0.660,
+      "ballad_genre_score": 0.470,
+      "VocalContent_x_MoodScore": 0.468,
+      "RhythmScore_x_TrackDurationMs": 0.329
+    },
+    "scaling": "StandardScaler"
+  },
+  "preprocessing": {
+    "comprehensive_interactions": true,
+    "total_generated_features": 164,
+    "feature_reduction_ratio": 0.91,
+    "threshold_strategy": "importance_based_filtering",
+    "outlier_handling": "none",
+    "missing_values": "none"
+  }
+}

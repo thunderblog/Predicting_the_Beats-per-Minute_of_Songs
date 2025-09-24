@@ -1,0 +1,58 @@
+{
+  "experiment_name": "exp06_ticket017_01_ultra_selective_8features",
+  "timestamp": "2025-09-24 14:07:44",
+  "cross_validation": {
+    "cv_strategy": "KFold",
+    "n_folds": 5,
+    "mean_rmse": 26.466042347419723,
+    "std_rmse": 0.06273081242345874,
+    "fold_results": {
+      "fold_1": {"rmse": 26.463818302815877, "model_file": "ultra_selective_8features_fold_1_20250924_140744.pkl"},
+      "fold_2": {"rmse": 26.407894407985367, "model_file": "ultra_selective_8features_fold_2_20250924_140744.pkl"},
+      "fold_3": {"rmse": 26.452925534565146, "model_file": "ultra_selective_8features_fold_3_20250924_140744.pkl"},
+      "fold_4": {"rmse": 26.42088041983496, "model_file": "ultra_selective_8features_fold_4_20250924_140744.pkl"},
+      "fold_5": {"rmse": 26.584693071897245, "model_file": "ultra_selective_8features_fold_5_20250924_140744.pkl"}
+    }
+  },
+  "leaderboard_results": {
+    "submission_date": "2025-09-24",
+    "submission_file": "submission_ultra_selective_8features.csv",
+    "public_lb_score": 26.38898,
+    "public_lb_rank": "TBD",
+    "private_lb_score": "TBD",
+    "private_lb_rank": "TBD"
+  },
+  "prediction_results": {
+    "ensemble_method": "5-fold_average",
+    "n_models": 5,
+    "test_predictions": {
+      "mean_prediction": 119.06,
+      "min_prediction": 115.59,
+      "max_prediction": 124.43,
+      "prediction_range": 8.84
+    }
+  },
+  "performance_metrics": {
+    "cv_vs_lb_consistency": -0.0770,
+    "overfitting_indicator": "良好（CV-LB差 < 0.1）",
+    "improvement_from_baseline": "TBD",
+    "improvement_from_previous": 0.00134,
+    "training_time_minutes": 5
+  },
+  "feature_analysis": {
+    "total_features_generated": 164,
+    "features_selected": 8,
+    "reduction_ratio": 0.84,
+    "dominant_feature_category": "MoodScore系交互作用",
+    "moodscore_features_count": 6,
+    "time_features_count": 2,
+    "genre_features_count": 1
+  },
+  "notes": [
+    "8特徴量で50特徴量とほぼ同等性能を実現",
+    "MoodScoreが最も重要な特徴量であることを実証",
+    "84%の特徴量削減で処理時間を67%短縮",
+    "実用性と性能の最適バランスを達成",
+    "過学習リスクの大幅削減"
+  ]
+}

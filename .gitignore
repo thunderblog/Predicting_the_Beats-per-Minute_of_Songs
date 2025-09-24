@@ -203,6 +203,8 @@ reports/figures/
 
 # Experiment management - exclude large files but keep metadata
 experiments/**/submission*.csv        # 提出ファイル（大容量）
+data/processed/submission*.csv         # 提出ファイル（processedディレクトリ）
+submission*.csv                        # ルートディレクトリの提出ファイル
 experiments/**/models/                # モデルファイル（大容量）
 experiments/**/*_cv_results_*.json    # タイムスタンプ付きCV結果（冗長）
 experiments/**/feature_importance*.csv # 特徴量重要度（生成可能）
