@@ -1,3 +1,13 @@
+"""
+Features.py - Refactored Feature Engineering Module
+
+This module now serves as a backward-compatible interface to the new
+modular feature engineering system located in src/features/ directory.
+
+All original functions are preserved for backward compatibility while
+internally utilizing the new refactored modules.
+"""
+
 from pathlib import Path
 
 from loguru import logger
@@ -15,6 +25,25 @@ from itertools import combinations
 
 from src.config import PROCESSED_DATA_DIR
 
+# Import refactored modules
+from src.features import (
+    # Feature creators
+    BasicInteractionCreator,
+    ComprehensiveInteractionCreator,
+    StatisticalFeatureCreator,
+    MusicGenreFeatureCreator,
+    DurationFeatureCreator,
+    AdvancedFeatureCreator,
+    FeaturePipeline,
+    create_feature_pipeline,
+    # Processing functions
+    select_features as new_select_features,
+    scale_features as new_scale_features,
+    analyze_feature_importance as new_analyze_feature_importance,
+    compare_genre_features_to_bpm as new_compare_genre_features_to_bpm,
+    detect_multicollinearity as new_detect_multicollinearity,
+)
+
 app = typer.Typer()
 
 
@@ -27,29 +56,9 @@ def create_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         交互作用特徴量が追加されたデータフレーム
     """
-    logger.info("交互作用特徴量を作成中...")
-
-    # 元のデータフレームをコピー
-    df_features = df.copy()
-
-    # リズムとエネルギーの交互作用
-    df_features["rhythm_energy_product"] = df["RhythmScore"] * df["Energy"]
-    df_features["rhythm_energy_ratio"] = df["RhythmScore"] / (df["Energy"] + 1e-8)
-
-    # 音声特徴量の組み合わせ
-    df_features["loudness_vocal_product"] = df["AudioLoudness"] * df["VocalContent"]
-    df_features["acoustic_instrumental_ratio"] = df["AcousticQuality"] / (
-        df["InstrumentalScore"] + 1e-8
-    )
-
-    # パフォーマンスとムード特徴量
-    df_features["live_mood_product"] = df["LivePerformanceLikelihood"] * df["MoodScore"]
-    df_features["energy_mood_product"] = df["Energy"] * df["MoodScore"]
-
-    # 複雑な交互作用
-    df_features["rhythm_mood_energy"] = df["RhythmScore"] * df["MoodScore"] * df["Energy"]
-
-    return df_features
+    # Use refactored module
+    creator = BasicInteractionCreator()
+    return creator.create_features(df)
 
 
 def create_comprehensive_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -64,61 +73,9 @@ def create_comprehensive_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         包括的交互作用特徴量が追加されたデータフレーム
     """
-    logger.info("包括的交互作用特徴量を作成中...")
-
-    df_features = df.copy()
-
-    # 基本数値特徴量を定義（サンプルコードと同じ）
-    num_cols = [
-        'RhythmScore', 'AudioLoudness', 'VocalContent', 'AcousticQuality',
-        'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore',
-        'TrackDurationMs', 'Energy'
-    ]
-
-    # 存在する特徴量のみを使用
-    available_num_cols = [col for col in num_cols if col in df.columns]
-
-    if not available_num_cols:
-        logger.warning("数値特徴量が見つかりません")
-        return df_features
-
-    logger.info(f"処理対象数値特徴量: {len(available_num_cols)}個")
-
-    # 新特徴量を格納する辞書
-    new_features = {}
-
-    # 1. 全ペア組み合わせの積特徴量と二乗項を生成
-    logger.info("積特徴量と二乗項を生成中...")
-    for i in range(len(available_num_cols)):
-        for j in range(i, len(available_num_cols)):
-            col1 = available_num_cols[i]
-            col2 = available_num_cols[j]
-
-            # 積特徴量 (i=jの場合は二乗項)
-            new_features[f'{col1}_x_{col2}'] = df[col1] * df[col2]
-
-            # 二乗項は別途明示的に作成
-            if i == j:
-                new_features[f'{col1}_squared'] = df[col1] * df[col1]
-
-    # 2. 全ペア組み合わせの比率特徴量を生成
-    logger.info("比率特徴量を生成中...")
-    for col1 in available_num_cols:
-        for col2 in available_num_cols:
-            if col1 != col2:  # 自分自身での除算は除外
-                # ゼロ除算対策で分母に1e-6を加算
-                new_features[f'{col1}_div_{col2}'] = df[col1] / (df[col2] + 1e-6)
-
-    # 3. 新特徴量を一括で追加（DataFrameの断片化を防ぐ）
-    logger.info("新特徴量を一括追加中...")
-    new_features_df = pd.DataFrame(new_features, index=df.index)
-    df_features = pd.concat([df_features, new_features_df], axis=1)
-
-    feature_count = len(new_features)
-
-    logger.success(f"包括的交互作用特徴量を作成完了: {feature_count}個の新特徴量を追加")
-
-    return df_features
+    # Use refactored module
+    creator = ComprehensiveInteractionCreator()
+    return creator.create_features(df)
 
 
 def create_music_genre_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -133,37 +90,9 @@ def create_music_genre_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         音楽ジャンル推定特徴量が追加されたデータフレーム
     """
-    logger.info("音楽ジャンル推定特徴量を作成中...")
-
-    df_features = df.copy()
-
-    # ダンス系ジャンル特徴量: Energy×RhythmScore
-    # 高エネルギー & 高リズムスコア = EDM/ダンス系楽曲の特徴 (通常120-140+ BPM)
-    df_features["dance_genre_score"] = df["Energy"] * df["RhythmScore"]
-
-    # アコースティック系ジャンル特徴量: AcousticQuality×InstrumentalScore
-    # 高音響品質 & 高楽器演奏スコア = フォーク/クラシック系楽曲の特徴 (通常60-120 BPM)
-    df_features["acoustic_genre_score"] = df["AcousticQuality"] * df["InstrumentalScore"]
-
-    # バラード系ジャンル特徴量: VocalContent×MoodScore
-    # 高ボーカル含有量 & 高ムードスコア = バラード/R&B系楽曲の特徴 (通常70-100 BPM)
-    df_features["ballad_genre_score"] = df["VocalContent"] * df["MoodScore"]
-
-    # 追加のジャンル関連特徴量
-    # ロック/ポップ系: 中程度のエネルギー × ライブ演奏っぽさ (通常90-130 BPM)
-    df_features["rock_genre_score"] = df["Energy"] * df["LivePerformanceLikelihood"]
-
-    # エレクトロニック系: 低ボーカル × 高エネルギー (通常100-180 BPM)
-    df_features["electronic_genre_score"] = (
-        1 - df["VocalContent"] / (df["VocalContent"].max() + 1e-8)
-    ) * df["Energy"]
-
-    # アンビエント/チルアウト系: 低エネルギー × 高音響品質 (通常60-90 BPM)
-    df_features["ambient_genre_score"] = (1 - df["Energy"] / (df["Energy"].max() + 1e-8)) * df[
-        "AcousticQuality"
-    ]
-
-    return df_features
+    # Use refactored module
+    creator = MusicGenreFeatureCreator()
+    return creator.create_features(df)
 
 
 def create_duration_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -175,31 +104,9 @@ def create_duration_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         時間特徴量が追加されたデータフレーム
     """
-    logger.info("トラック時間特徴量を作成中...")
-
-    df_features = df.copy()
-
-    # ミリ秒を他の時間単位に変換
-    df_features["track_duration_seconds"] = df["TrackDurationMs"] / 1000
-    df_features["track_duration_minutes"] = df["TrackDurationMs"] / (1000 * 60)
-
-    # 時間カテゴリ
-    df_features["is_short_track"] = (df["TrackDurationMs"] < 180000).astype(int)  # 3分未満
-    df_features["is_long_track"] = (df["TrackDurationMs"] > 300000).astype(int)  # 5分超
-
-    # 時間区分
-    duration_bins = [0, 120000, 180000, 240000, 300000, float("inf")]
-    duration_labels = ["very_short", "short", "medium", "long", "very_long"]
-    df_features["duration_category"] = pd.cut(
-        df["TrackDurationMs"], bins=duration_bins, labels=duration_labels, include_lowest=True
-    ).astype(str)
-
-    # 時間カテゴリのワンホットエンコーディング
-    duration_dummies = pd.get_dummies(df_features["duration_category"], prefix="duration")
-    df_features = pd.concat([df_features, duration_dummies], axis=1)
-    df_features.drop("duration_category", axis=1, inplace=True)
-
-    return df_features
+    # Use refactored module
+    creator = DurationFeatureCreator()
+    return creator.create_features(df)
 
 
 def create_statistical_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -211,37 +118,9 @@ def create_statistical_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         統計的特徴量が追加されたデータフレーム
     """
-    logger.info("統計的特徴量を作成中...")
-
-    df_features = df.copy()
-
-    # 数値特徴量を選択（idとターゲットを除く）
-    numerical_cols = [
-        "RhythmScore",
-        "AudioLoudness",
-        "VocalContent",
-        "AcousticQuality",
-        "InstrumentalScore",
-        "LivePerformanceLikelihood",
-        "MoodScore",
-        "Energy",
-    ]
-
-    # 全スコアの合計
-    df_features["total_score"] = df[numerical_cols].sum(axis=1)
-
-    # 全スコアの平均
-    df_features["mean_score"] = df[numerical_cols].mean(axis=1)
-
-    # スコアの標準偏差
-    df_features["std_score"] = df[numerical_cols].std(axis=1)
-
-    # 最小値と最大値
-    df_features["min_score"] = df[numerical_cols].min(axis=1)
-    df_features["max_score"] = df[numerical_cols].max(axis=1)
-    df_features["range_score"] = df_features["max_score"] - df_features["min_score"]
-
-    return df_features
+    # Use refactored module
+    creator = StatisticalFeatureCreator()
+    return creator.create_features(df)
 
 
 def create_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -253,72 +132,9 @@ def create_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         高次特徴量が追加されたデータフレーム
     """
-    logger.info("独立性の高い高次特徴量を作成中...")
-
-    df_features = df.copy()
-
-    # 1. 比率ベース特徴量（ゼロ除算対策付き）
-    logger.info("比率ベース特徴量を作成中...")
-    df_features["vocal_energy_ratio"] = df["VocalContent"] / (df["Energy"] + 1e-8)
-    df_features["acoustic_loudness_ratio"] = df["AcousticQuality"] / (df["AudioLoudness"] + 1e-8)
-    df_features["rhythm_duration_ratio"] = df["RhythmScore"] / (np.log1p(df["TrackDurationMs"]) + 1e-8)
-    df_features["instrumental_live_ratio"] = df["InstrumentalScore"] / (df["LivePerformanceLikelihood"] + 1e-8)
-
-    # 2. 対数変換時間特徴量（スケール正規化）
-    logger.info("対数変換時間特徴量を作成中...")
-    log_duration = np.log1p(df["TrackDurationMs"])  # log(1+x)でゼロ値対応
-    df_features["log_duration_rhythm"] = log_duration * df["RhythmScore"]
-    df_features["log_duration_energy"] = log_duration * df["Energy"]
-    df_features["log_duration_mood"] = log_duration * df["MoodScore"]
-
-    # 時間の3次元カテゴリ化
-    duration_percentiles = np.percentile(df["TrackDurationMs"], [33, 67])
-    df_features["duration_category"] = pd.cut(
-        df["TrackDurationMs"],
-        bins=[0] + list(duration_percentiles) + [np.inf],
-        labels=[0, 1, 2]  # short, medium, long
-    ).astype(int)
-
-    # 3. 標準化済み交互作用特徴量（Z-score正規化後の積）
-    logger.info("標準化済み交互作用特徴量を作成中...")
-
-    # 主要特徴量のZ-score正規化
-    vocal_z = zscore(df["VocalContent"])
-    energy_z = zscore(df["Energy"])
-    rhythm_z = zscore(df["RhythmScore"])
-    mood_z = zscore(df["MoodScore"])
-    acoustic_z = zscore(df["AcousticQuality"])
-    loudness_z = zscore(df["AudioLoudness"])
-
-    # 標準化済み交互作用
-    df_features["standardized_vocal_mood"] = vocal_z * mood_z
-    df_features["standardized_energy_rhythm"] = energy_z * rhythm_z
-    df_features["standardized_acoustic_loudness"] = acoustic_z * loudness_z
-    df_features["standardized_vocal_energy"] = vocal_z * energy_z
-    df_features["standardized_rhythm_mood"] = rhythm_z * mood_z
-
-    # 4. 音楽理論ベース複雑指標（BPM予測特化）
-    logger.info("音楽理論ベース複雑指標を作成中...")
-
-    # テンポ複雑性指標（リズム×音響品質/エネルギー）
-    df_features["tempo_complexity"] = (df["RhythmScore"] * df["AcousticQuality"]) / (df["Energy"] + 1e-8)
-
-    # パフォーマンス動的指標（ライブ性×楽器性）
-    df_features["performance_dynamics"] = df["LivePerformanceLikelihood"] * df["InstrumentalScore"]
-
-    # 音楽密度指標（音量×ボーカル×楽器/時間）
-    df_features["music_density"] = (df["AudioLoudness"] * df["VocalContent"] * df["InstrumentalScore"]) / (log_duration + 1e-8)
-
-    # ハーモニック複雑性（音響品質×ムード/エネルギー）
-    df_features["harmonic_complexity"] = (df["AcousticQuality"] * df["MoodScore"]) / (df["Energy"] + 1e-8)
-
-    # 楽曲構造推定（リズム×時間×ライブ性）
-    df_features["song_structure_indicator"] = df["RhythmScore"] * log_duration * df["LivePerformanceLikelihood"]
-
-    n_new_features = len(df_features.columns) - len(df.columns)
-    logger.success(f"高次特徴量を作成完了: {n_new_features}個の新特徴量を追加")
-
-    return df_features
+    # Use refactored module
+    creator = AdvancedFeatureCreator()
+    return creator.create_features(df)
 
 
 def select_features(
@@ -327,7 +143,7 @@ def select_features(
     X_val: pd.DataFrame = None,
     method: str = "kbest",
     k: int = 20,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+):
     """様々な選択手法を使用して最も重要な特徴量を選択する。
 
     Args:
@@ -340,89 +156,8 @@ def select_features(
     Returns:
         (selected_X_train, selected_X_val)のタプル
     """
-    logger.info(f"{method}法で特徴量選択中 (k={k})...")
-
-    if method == "kbest":
-        # F統計量による特徴量選択
-        selector = SelectKBest(score_func=f_regression, k=k)
-        X_train_selected = selector.fit_transform(X_train, y_train)
-
-        # 選択された特徴量のインデックスを取得
-        selected_indices = selector.get_support(indices=True)
-        selected_features = X_train.columns[selected_indices]
-
-        # DataFrameとして再構築
-        X_train_result = pd.DataFrame(
-            X_train_selected, columns=selected_features, index=X_train.index
-        )
-
-        # 検証データがある場合は同じ特徴量で変換
-        if X_val is not None:
-            X_val_result = pd.DataFrame(
-                selector.transform(X_val), columns=selected_features, index=X_val.index
-            )
-        else:
-            X_val_result = None
-
-    elif method == "mutual_info":
-        # 相互情報量による特徴量選択
-        selector = SelectKBest(score_func=mutual_info_regression, k=k)
-        X_train_selected = selector.fit_transform(X_train, y_train)
-
-        selected_indices = selector.get_support(indices=True)
-        selected_features = X_train.columns[selected_indices]
-
-        X_train_result = pd.DataFrame(
-            X_train_selected, columns=selected_features, index=X_train.index
-        )
-
-        if X_val is not None:
-            X_val_result = pd.DataFrame(
-                selector.transform(X_val), columns=selected_features, index=X_val.index
-            )
-        else:
-            X_val_result = None
-
-    elif method == "correlation":
-        # 相関係数による特徴量選択
-        correlations = X_train.corrwith(y_train).abs()
-        selected_features = correlations.nlargest(k).index.tolist()
-
-        X_train_result = X_train[selected_features]
-        X_val_result = X_val[selected_features] if X_val is not None else None
-
-    elif method == "combined":
-        # 組み合わせアプローチ：F統計量と相互情報量の平均スコア
-        # F統計量による選択
-        selector_f = SelectKBest(score_func=f_regression, k=len(X_train.columns))
-        selector_f.fit(X_train, y_train)
-        f_scores = selector_f.scores_
-
-        # 相互情報量による選択
-        selector_mi = SelectKBest(score_func=mutual_info_regression, k=len(X_train.columns))
-        selector_mi.fit(X_train, y_train)
-        mi_scores = selector_mi.scores_
-
-        # スコアを正規化して平均を取る
-        f_scores_normalized = (f_scores - f_scores.min()) / (f_scores.max() - f_scores.min())
-        mi_scores_normalized = (mi_scores - mi_scores.min()) / (mi_scores.max() - mi_scores.min())
-        combined_scores = (f_scores_normalized + mi_scores_normalized) / 2
-
-        # 上位k個の特徴量を選択
-        selected_indices = np.argsort(combined_scores)[-k:]
-        selected_features = X_train.columns[selected_indices]
-
-        X_train_result = X_train[selected_features]
-        X_val_result = X_val[selected_features] if X_val is not None else None
-
-    else:
-        # 不明な手法の場合は元の特徴量を返す
-        logger.warning(f"不明な特徴量選択手法: {method}。元の特徴量を使用します。")
-        X_train_result = X_train
-        X_val_result = X_val
-
-    logger.success(f"{len(X_train_result.columns)}個の特徴量を選択しました")
-    return X_train_result, X_val_result
+    # Use refactored module
+    return new_select_features(X_train, y_train, X_val, method, k)
 
 
 def scale_features(
