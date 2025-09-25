@@ -1,13 +1,46 @@
-# TICKET-008: 音楽ジャンル推定特徴量 使用ガイド
+# TICKET-008: 音楽ジャンル推定特徴量 使用ガイド 🔄 **リファクタリング対応版**
 
 ## 🎵 概要
 音楽理論に基づく6つのジャンル推定特徴量を使用したBPM予測の実行手順
 
+**⚠️ 重要**: src/features.py がリファクタリングされました。新しい方法と従来の方法の両方をサポートしています。
+
 ## 📋 実行コマンド
 
-### 1. 特徴量生成（必須）
+### 実行方法の選択
+
+#### **方法A: 従来のCLI（推奨・簡単）**
 ```bash
 python -m src.features --create-genre --output-dir=data/processed
+```
+
+#### **方法B: 新しいパイプライン（高度）**
+```python
+from src.features import MusicGenreFeatureCreator, FeaturePipeline
+import pandas as pd
+
+# 個別作成器の使用
+creator = MusicGenreFeatureCreator()
+df = pd.read_csv('data/processed/train.csv')
+result = creator.create_features(df)
+
+# パイプライン使用
+from src.features import create_feature_pipeline
+pipeline = create_feature_pipeline()  # ジャンル特徴量含む
+result = pipeline.execute(df)
+```
+
+#### **方法C: カスタムパイプライン**
+```python
+from src.features import FeaturePipeline, MusicGenreFeatureCreator, StatisticalFeatureCreator
+
+pipeline = FeaturePipeline()
+pipeline.add_creator(MusicGenreFeatureCreator())
+pipeline.add_creator(StatisticalFeatureCreator())
+
+result = pipeline.execute(df)
+summary = pipeline.get_execution_summary()
+print(summary)
 ```
 **生成される特徴量:**
 - `dance_genre_score`: Energy × RhythmScore

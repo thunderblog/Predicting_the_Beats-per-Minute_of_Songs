@@ -65,7 +65,18 @@ This is a Cookiecutter Data Science project following standard ML/data science s
 ### Core Module Structure (`src/`)
 - `config.py` - Central configuration with project paths (DATA_DIR, MODELS_DIR, etc.) and logging setup
 - `dataset.py` - Data processing pipeline (CLI with typer)
-- `features.py` - Feature engineering utilities
+- `features.py` - Feature engineering utilities (backward-compatible interface)
+- `features/` - **リファクタリング済み特徴量エンジニアリングモジュール**
+  - `base.py` - 基底クラス `BaseFeatureCreator` と共通処理
+  - `interaction.py` - 交互作用特徴量作成器
+  - `statistical.py` - 統計的特徴量作成器
+  - `genre.py` - 音楽ジャンル特徴量作成器
+  - `duration.py` - 時間特徴量作成器
+  - `advanced.py` - 高次特徴量作成器
+  - `selection.py` - 特徴量選択機能
+  - `scaling.py` - スケーリング機能
+  - `analysis.py` - 特徴量重要度分析
+  - `__init__.py` - 公開APIとパイプライン管理
 - `plots.py` - Visualization utilities
 - `modeling/` - Machine learning components
   - `train.py` - Model training pipeline (CLI with typer)
@@ -98,6 +109,67 @@ Each main module can be run directly or via Make:
 - `python src/dataset.py` or `make data`
 - `python src/modeling/train.py`
 - `python src/modeling/predict.py`
+- `python src/features.py` - Feature engineering CLI (CLI with typer)
+
+### 特徴量エンジニアリングの使用方法
+
+#### **従来の方法（後方互換性保持）**
+```python
+# 従来通りの関数インターフェース
+from src.features import (
+    create_interaction_features,
+    create_statistical_features,
+    create_music_genre_features,
+    select_features,
+    scale_features
+)
+
+# 既存コードはそのまま動作
+df_with_interactions = create_interaction_features(df)
+df_with_stats = create_statistical_features(df_with_interactions)
+```
+
+#### **新しいクラスベース方法（推奨）**
+```python
+# 個別の特徴量作成器を使用
+from src.features import (
+    BasicInteractionCreator,
+    StatisticalFeatureCreator,
+    MusicGenreFeatureCreator
+)
+
+creator = BasicInteractionCreator()
+result = creator.create_features(df)
+print(f"Created features: {creator.created_features}")
+```
+
+#### **パイプライン方法（最も推奨）**
+```python
+# デフォルトパイプラインの使用
+from src.features import create_feature_pipeline
+
+pipeline = create_feature_pipeline()
+result = pipeline.execute(df)
+
+# 実行サマリー確認
+summary = pipeline.get_execution_summary()
+print(summary)
+```
+
+#### **カスタムパイプライン構築**
+```python
+# 特定の特徴量作成器のみ使用
+from src.features import FeaturePipeline, BasicInteractionCreator, StatisticalFeatureCreator
+
+pipeline = FeaturePipeline()
+pipeline.add_creator(BasicInteractionCreator())
+pipeline.add_creator(StatisticalFeatureCreator())
+
+result = pipeline.execute(df)
+
+# 条件分岐実行
+result = pipeline.execute(df, creators_to_run=["BasicInteraction"])
+```
 
 ## コーディング規則とベストプラクティス
 
@@ -223,13 +295,28 @@ feature/ticket-003/prediction-pipeline
      - 予測結果可視化
 
 ### 第2段階: 特徴量改善
-3. **[TICKET-004] 特徴量エンジニアリング機能** ✅ **完了**
-   - ファイル: `src/features.py`
-   - 現状: 実装完了
-   - 要件:
+3. **[TICKET-004] 特徴量エンジニアリング機能** ✅ **完了** 🔄 **リファクタリング済み**
+   - メインファイル: `src/features.py` (後方互換インターフェース)
+   - モジュール構成: `src/features/` ディレクトリに機能分離
+     - `base.py` - 基底クラス・共通処理
+     - `interaction.py` - 交互作用特徴量
+     - `statistical.py` - 統計的特徴量
+     - `genre.py` - ジャンル特徴量
+     - `duration.py` - 時間特徴量
+     - `advanced.py` - 高次特徴量
+     - `selection.py` - 特徴量選択
+     - `scaling.py` - スケーリング
+     - `analysis.py` - 分析機能
+     - `__init__.py` - 公開API定義
+   - アーキテクチャ:
+     - 基底クラス `BaseFeatureCreator` による統一インターフェース
+     - `FeaturePipeline` によるワークフロー管理
+     - 単一責任の原則に基づく機能分離
+   - 機能:
      - EDA結果を基にした新特徴量作成（交互作用・時間・統計的特徴量）
      - 特徴量選択機能（F統計量・相互情報量・相関・組み合わせ）
      - スケーリング機能（Standard・Robust・MinMaxスケーラ対応）
+     - **後方互換性**: 既存の関数インターフェースを完全保持
 
 ### 第3段階: モデル開発
 4. **[TICKET-002] LightGBM回帰モデルの訓練機能** ✅ **完了**
