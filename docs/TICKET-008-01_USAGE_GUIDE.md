@@ -7,26 +7,31 @@ TICKET-008で発見された多重共線性問題を自動解決する機能。�
 
 ### 1. 多重共線性除去付き特徴量生成
 ```bash
+# 基本実行（推奨）
 python -m src.features \
   --create-genre \
   --remove-multicollinearity \
-  --multicollinearity-threshold=0.7 \
+  --multicollinearity-threshold 0.7 \
   --prioritize-genre-features \
-  --output-dir=data/processed
+  --output-dir data/processed
+
+# 簡略形（デフォルト値使用）
+python -m src.features --create-genre --remove-multicollinearity
 ```
 
 **新規オプション:**
 - `--remove-multicollinearity`: 多重共線性除去を有効化
-- `--multicollinearity-threshold=0.7`: 相関検出閾値（デフォルト0.7）
-- `--prioritize-genre-features`: ジャンル特徴量優先モード（デフォルト有効）
+- `--multicollinearity-threshold 0.7`: 相関検出閾値（デフォルト0.7）
+- `--prioritize-genre-features`: ジャンル特徴量優先モード（デフォルトtrue）
+- `--no-prioritize-genre-features`: ジャンル特徴量優先を無効化
 
 ### 2. 閾値調整での実行例
 ```bash
 # 厳格な閾値（高相関のみ除去）
-python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold=0.8
+python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold 0.8
 
 # 緩い閾値（より多くの相関を除去）
-python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold=0.6
+python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold 0.6
 
 # ジャンル特徴量を優先しない場合
 python -m src.features --create-genre --remove-multicollinearity --no-prioritize-genre-features
@@ -71,7 +76,7 @@ Energy,dance_genre_score,0.871,Non-genre feature removed in favor of genre featu
 python -m src.features \
   --create-genre \
   --remove-multicollinearity \
-  --output-dir=data/processed
+  --output-dir data/processed
 ```
 **効果**: 閾値0.7で多重共線性除去、ジャンル特徴量優先
 
@@ -81,7 +86,7 @@ python -m src.features \
   --create-genre \
   --remove-multicollinearity \
   --multicollinearity-threshold=0.8 \
-  --output-dir=data/processed
+  --output-dir data/processed
 ```
 **効果**: 高相関ペアのみ除去、特徴量数維持
 
@@ -91,14 +96,14 @@ python -m src.features \
   --create-genre \
   --remove-multicollinearity \
   --multicollinearity-threshold=0.6 \
-  --output-dir=data/processed
+  --output-dir data/processed
 ```
 **効果**: より多くの特徴量除去、モデル簡素化
 
 ### パターンD: 完全パイプライン（訓練→予測）
 ```bash
 # Step 1: 多重共線性除去付き特徴量生成
-python -m src.features --create-genre --remove-multicollinearity --output-dir=data/processed
+python -m src.features --create-genre --remove-multicollinearity --output-dir data/processed
 
 # Step 2: 最適化されたデータセットで訓練
 python -m src.modeling.train \
@@ -134,7 +139,7 @@ python -m src.modeling.predict \
 ### 問題1: 高相関ペアが検出されない
 ```bash
 # 解決策: 閾値を下げる
-python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold=0.6
+python -m src.features --create-genre --remove-multicollinearity --multicollinearity-threshold 0.6
 ```
 
 ### 問題2: 重要な特徴量が除去される

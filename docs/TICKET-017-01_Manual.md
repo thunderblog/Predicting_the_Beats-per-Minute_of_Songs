@@ -21,11 +21,17 @@ TICKET-017-01で実装された**包括的交互作用特徴量**（Kaggleサン
 # 基本実行（包括的交互作用特徴量を生成）
 python -m src.features --create-comprehensive-interactions
 
-# PYTHONPATHを使用する場合
-PYTHONPATH=. python src/features.py --create-comprehensive-interactions
-
 # 出力先を指定
 python -m src.features --create-comprehensive-interactions --output-dir data/processed/enhanced
+
+# 他の特徴量を無効化して包括的交互作用のみ
+python -m src.features \
+    --no-create-interactions \
+    --no-create-statistical \
+    --no-create-genre \
+    --no-create-duration \
+    --create-comprehensive-interactions \
+    --output-dir data/processed/comprehensive_only
 
 # 他の特徴量と組み合わせ
 python -m src.features \
@@ -36,10 +42,29 @@ python -m src.features \
 ```
 
 #### Pythonスクリプトでの使用
+
+**方法A: 新しいクラスベースAPI（推奨）**
 ```python
-import sys
-sys.path.append('src')
-from features import create_comprehensive_interaction_features
+from src.features import ComprehensiveInteractionCreator
+import pandas as pd
+
+# データ読み込み
+df = pd.read_csv('data/processed/train.csv')
+
+# 特徴量作成器を使用
+creator = ComprehensiveInteractionCreator()
+enhanced_df = creator.create_features(df)
+
+# 作成された特徴量を確認
+print(f"元特徴量: {len(df.columns)}個")
+print(f"拡張後: {len(enhanced_df.columns)}個")
+print(f"新特徴量: {len(creator.created_features)}個")
+print(f"作成特徴量名: {creator.created_features}")
+```
+
+**方法B: 後方互換関数（既存コード）**
+```python
+from src.features import create_comprehensive_interaction_features
 import pandas as pd
 
 # データ読み込み
@@ -51,6 +76,22 @@ enhanced_df = create_comprehensive_interaction_features(df)
 print(f"元特徴量: {len(df.columns)}個")
 print(f"拡張後: {len(enhanced_df.columns)}個")
 print(f"新特徴量: {len(enhanced_df.columns) - len(df.columns)}個")
+```
+
+**方法C: パイプラインでの統合実行**
+```python
+from src.features import FeaturePipeline, ComprehensiveInteractionCreator
+
+# カスタムパイプライン作成
+pipeline = FeaturePipeline()
+pipeline.add_creator(ComprehensiveInteractionCreator())
+
+# 実行
+enhanced_df = pipeline.execute(df)
+
+# 実行サマリー確認
+summary = pipeline.get_execution_summary()
+print(summary)
 ```
 
 ### 2. モデル訓練での使用
@@ -301,7 +342,9 @@ python -m src.features \
 
 ## 📁 関連ファイル
 
-- **実装**: `src/features.py` (`create_comprehensive_interaction_features`)
+- **実装**: `src/features/interaction.py` (`ComprehensiveInteractionCreator`)
+- **後方互換**: `src/features.py` (`create_comprehensive_interaction_features`)
+- **新モジュール**: `src/features/` ディレクトリ構造
 - **テストスクリプト**: `scripts/test_ticket017_01.py`
 - **性能レポート**: `docs/TICKET-017-01_Performance_Test_Report.md`
 - **チケット仕様**: `CLAUDE.md` (TICKET-017-01セクション)

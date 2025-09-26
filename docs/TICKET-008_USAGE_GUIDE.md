@@ -3,44 +3,72 @@
 ## 🎵 概要
 音楽理論に基づく6つのジャンル推定特徴量を使用したBPM予測の実行手順
 
-**⚠️ 重要**: src/features.py がリファクタリングされました。新しい方法と従来の方法の両方をサポートしています。
+**⚠️ 重要**: src/features.py がリファクタリングされ、新しいモジュラー構造に変更されました。
+- **新構造**: `src/features/` ディレクトリで機能分離
+- **後方互換**: 既存の関数インターフェースを完全保持
+- **新機能**: クラスベースとパイプライン管理機能追加
 
 ## 📋 実行コマンド
 
 ### 実行方法の選択
 
-#### **方法A: 従来のCLI（推奨・簡単）**
+#### **方法A: 新しいCLI（推奨・簡単）**
 ```bash
+# ジャンル特徴量のみ生成
 python -m src.features --create-genre --output-dir=data/processed
+
+# 他の特徴量を無効化してジャンル特徴量のみ
+python -m src.features \
+    --no-create-interactions \
+    --no-create-statistical \
+    --no-create-duration \
+    --create-genre \
+    --output-dir=data/processed
 ```
 
-#### **方法B: 新しいパイプライン（高度）**
+#### **方法B: 新しいクラスベースAPI（高度）**
 ```python
-from src.features import MusicGenreFeatureCreator, FeaturePipeline
+# 個別特徴量作成器の使用
+from src.features import MusicGenreFeatureCreator
 import pandas as pd
 
-# 個別作成器の使用
 creator = MusicGenreFeatureCreator()
 df = pd.read_csv('data/processed/train.csv')
 result = creator.create_features(df)
+print(f"Created features: {creator.created_features}")
 
-# パイプライン使用
+# 統合パイプラインの使用
 from src.features import create_feature_pipeline
 pipeline = create_feature_pipeline()  # ジャンル特徴量含む
 result = pipeline.execute(df)
+summary = pipeline.get_execution_summary()
+print(summary)
 ```
 
-#### **方法C: カスタムパイプライン**
+#### **方法C: カスタムパイプライン構築**
 ```python
 from src.features import FeaturePipeline, MusicGenreFeatureCreator, StatisticalFeatureCreator
 
+# カスタムパイプライン作成
 pipeline = FeaturePipeline()
 pipeline.add_creator(MusicGenreFeatureCreator())
 pipeline.add_creator(StatisticalFeatureCreator())
 
+# 実行
 result = pipeline.execute(df)
 summary = pipeline.get_execution_summary()
 print(summary)
+
+# 条件付き実行
+result = pipeline.execute(df, creators_to_run=["MusicGenre"])
+```
+
+#### **方法D: 従来の関数インターフェース（後方互換）**
+```python
+# 既存コードはそのまま動作
+from src.features import create_music_genre_features
+
+df_with_genre = create_music_genre_features(df)
 ```
 **生成される特徴量:**
 - `dance_genre_score`: Energy × RhythmScore
