@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-TICKET-017最適化版 Kaggle提出スクリプト
+TICKET-017-01+02版 Kaggle提出スクリプト
 
-メモリ効率化と安定性を重視したTICKET-017統合版
+最高性能(26.38534)を達成したTICKET-017-01（包括的交互作用）+ TICKET-017-02（対数変換）のみで
+再現実験を行う。ビニング特徴量は含めない。
 """
 
 import sys
@@ -16,17 +17,16 @@ import time
 import gc
 
 # プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from src.features import (
     create_comprehensive_interaction_features,
-    create_log_features,
-    create_binning_features
+    create_log_features
 )
 
-def create_ticket_017_optimized_features(df, include_binning=True):
-    """TICKET-017最適化版特徴量を作成（メモリ効率重視）"""
-    print("TICKET-017最適化版特徴量生成中...")
+def create_ticket_017_01_02_features(df):
+    """TICKET-017-01+02特徴量を作成（ビニング特徴量なし）"""
+    print("TICKET-017-01+02特徴量生成中...")
 
     # Step 1: TICKET-017-01（包括的交互作用特徴量）
     print("  Step 1: 包括的交互作用特徴量")
@@ -47,37 +47,15 @@ def create_ticket_017_optimized_features(df, include_binning=True):
     del df_step1
     gc.collect()
 
-    # Step 3: TICKET-017-03（ビニング・カテゴリ特徴量）- オプション
-    if include_binning:
-        print("  Step 3: ビニング・カテゴリ特徴量（基本のみ）")
-        try:
-            # テストデータの場合、BPMがないのでビニング統計をスキップ
-            if 'BeatsPerMinute' not in df.columns:
-                print("    テストデータのため統計特徴量をスキップ")
+    total_features = len(df_step2.columns) - len(df.columns)
+    print(f"  合計: +{total_features}特徴量 (元{len(df.columns)} -> {len(df_step2.columns)})")
 
-            df_complete = create_binning_features(df_step2)
-            step3_features = len(df_complete.columns) - len(df_step2.columns)
-            print(f"    +{step3_features}特徴量")
-        except Exception as e:
-            print(f"    ビニング特徴量作成エラー（スキップ）: {e}")
-            df_complete = df_step2.copy()
-            step3_features = 0
-    else:
-        df_complete = df_step2.copy()
-        step3_features = 0
+    return df_step2
 
-    # 中間データクリーンアップ
-    del df_step2
-    gc.collect()
-
-    total_features = len(df_complete.columns) - len(df.columns)
-    print(f"  合計: +{total_features}特徴量 (元{len(df.columns)} -> {len(df_complete.columns)})")
-
-    return df_complete
-
-def submit_ticket_017_optimized():
-    """TICKET-017最適化版でのKaggle提出実行"""
-    print("TICKET-017最適化版 Kaggle提出開始")
+def submit_ticket_017_01_02_only():
+    """TICKET-017-01+02版でのKaggle提出実行（最高性能再現）"""
+    print("TICKET-017-01+02版 Kaggle提出開始")
+    print("=== 最高性能26.38534の再現実験 ===")
     print("=" * 60)
 
     # データ読み込み
@@ -107,17 +85,17 @@ def submit_ticket_017_optimized():
     del train_df, validation_df
     gc.collect()
 
-    # Step 2: TICKET-017最適化版特徴量生成
-    print("\nStep 2: TICKET-017最適化版特徴量生成")
+    # Step 2: TICKET-017-01+02特徴量生成
+    print("\\nStep 2: TICKET-017-01+02特徴量生成")
     start_time = time.time()
 
     # 訓練データ
     print("  訓練データ処理中...")
-    train_features = create_ticket_017_optimized_features(full_train_df, include_binning=True)
+    train_features = create_ticket_017_01_02_features(full_train_df)
 
     # テストデータ
     print("  テストデータ処理中...")
-    test_features = create_ticket_017_optimized_features(test_df, include_binning=False)  # テストはビニング統計なし
+    test_features = create_ticket_017_01_02_features(test_df)
 
     feature_time = time.time() - start_time
     print(f"  特徴量生成時間: {feature_time:.2f}秒")
@@ -142,9 +120,9 @@ def submit_ticket_017_optimized():
     del train_features, test_features
     gc.collect()
 
-    # Step 3: 特徴量選択
-    print("\nStep 3: 特徴量選択")
-    n_features_select = min(120, len(common_features))  # 利用可能特徴量に合わせて調整
+    # Step 3: 特徴量選択（最高性能時の設定に合わせて）
+    print("\\nStep 3: 特徴量選択")
+    n_features_select = min(75, len(common_features))  # 最高性能時は約75特徴量
 
     print(f"  特徴量選択中: {len(common_features)} -> {n_features_select}")
 
@@ -162,8 +140,8 @@ def submit_ticket_017_optimized():
     del X_train_full, X_test_full
     gc.collect()
 
-    # Step 4: モデル訓練（5-Fold CV）
-    print("\nStep 4: LightGBMモデル訓練")
+    # Step 4: 最高性能時の正則化設定でモデル訓練（5-Fold CV）
+    print("\\nStep 4: 最高性能正則化LightGBMモデル訓練")
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
 
     models = []
@@ -176,21 +154,23 @@ def submit_ticket_017_optimized():
         X_fold_train, X_fold_val = X_train[train_idx], X_train[val_idx]
         y_fold_train, y_fold_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
 
-        # 最適化LightGBMモデル
+        # 最高性能時の強化正則化LightGBMモデル（26.38534達成時の設定）
         model = lgb.LGBMRegressor(
             objective='regression',
             metric='rmse',
             boosting_type='gbdt',
-            num_leaves=25,
-            learning_rate=0.05,
-            n_estimators=1500,
-            early_stopping_rounds=150,
-            reg_alpha=1.5,
-            reg_lambda=1.5,
-            feature_fraction=0.8,
-            bagging_fraction=0.8,
+            num_leaves=20,           # 高次元対応
+            learning_rate=0.03,     # 保守的学習率
+            n_estimators=2000,      # 十分な学習回数
+            early_stopping_rounds=200,  # 保守的早期停止
+            reg_alpha=2.0,          # 強いL1正則化
+            reg_lambda=2.0,         # 強いL2正則化
+            feature_fraction=0.7,   # 強い特徴量サンプリング
+            bagging_fraction=0.7,   # 強いデータサンプリング
             bagging_freq=5,
-            min_child_samples=40,
+            min_child_samples=50,   # 過学習抑制強化
+            subsample_for_bin=200000,
+            max_depth=6,            # 深度制限
             verbose=-1,
             random_state=42,
             force_col_wise=True
@@ -220,7 +200,7 @@ def submit_ticket_017_optimized():
     print(f"  CV RMSE: {mean_cv_rmse:.4f} (±{std_cv_rmse:.4f})")
 
     # Step 5: 提出ファイル作成
-    print("\nStep 5: Kaggle提出ファイル作成")
+    print("\\nStep 5: Kaggle提出ファイル作成")
 
     # テストデータのIDを取得（元のtest_dfから）
     test_df_original = pd.read_csv("data/processed/test.csv")
@@ -232,7 +212,7 @@ def submit_ticket_017_optimized():
 
     # ファイル保存
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    submission_path = f"data/processed/submission_ticket017_optimized_{timestamp}.csv"
+    submission_path = f"data/processed/submission_ticket017_01_02_only_{timestamp}.csv"
     submission_df.to_csv(submission_path, index=False)
 
     print(f"  提出ファイル保存: {submission_path}")
@@ -240,7 +220,7 @@ def submit_ticket_017_optimized():
     print(f"  予測平均: {predictions.mean():.2f}")
 
     # 特徴量重要度トップ10
-    print("\n  特徴量重要度 Top 10:")
+    print("\\n  特徴量重要度 Top 10:")
     feature_importance = models[0].feature_importances_
     importance_pairs = list(zip(selected_feature_names, feature_importance))
     importance_pairs.sort(key=lambda x: x[1], reverse=True)
@@ -251,35 +231,37 @@ def submit_ticket_017_optimized():
             feature_type = "comprehensive"
         elif 'log1p_' in feature_name:
             feature_type = "log_transform"
-        elif '_bin' in feature_name:
-            feature_type = "binning"
 
         print(f"    {i:2d}. {feature_name[:40]:<40} {importance:8.4f} ({feature_type})")
 
     # サマリー
-    print("\n" + "=" * 60)
-    print("TICKET-017最適化版 Kaggle提出完了")
+    print("\\n" + "=" * 60)
+    print("TICKET-017-01+02版 Kaggle提出完了")
+    print("=== 最高性能26.38534の再現実験 ===")
     print("=" * 60)
     print(f"共通特徴量数: {len(common_features)}")
     print(f"選択特徴量数: {n_features_select}")
     print(f"CV RMSE: {mean_cv_rmse:.4f} (±{std_cv_rmse:.4f})")
     print(f"提出ファイル: {submission_path}")
-    print(f"最適化点:")
-    print(f"  - メモリ効率化")
-    print(f"  - テストデータ向け処理調整")
-    print(f"  - 安定したハイパーパラメータ")
+    print(f"再現設定:")
+    print(f"  - TICKET-017-01: 包括的交互作用特徴量")
+    print(f"  - TICKET-017-02: 対数変換特徴量")
+    print(f"  - ビニング特徴量: なし（性能劣化要因として除外）")
+    print(f"  - 強化正則化: reg_alpha=2.0, reg_lambda=2.0")
+    print(f"  - サンプリング強化: 0.7")
     print(f"提出コマンド:")
-    print(f'kaggle competitions submit -c playground-series-s5e9 -f "{submission_path}" -m "TICKET-017 Optimized (CV: {mean_cv_rmse:.4f}, Features: {n_features_select})"')
+    print(f'kaggle competitions submit -c playground-series-s5e9 -f "{submission_path}" -m "TICKET-017-01+02 Only (CV: {mean_cv_rmse:.4f}, Features: {n_features_select}, Reproduce 26.38534)"')
 
     return True
 
 def main():
     """メイン実行"""
-    success = submit_ticket_017_optimized()
+    success = submit_ticket_017_01_02_only()
     if success:
-        print("\n成功: TICKET-017最適化版提出準備完了")
+        print("\\n成功: TICKET-017-01+02版提出準備完了")
+        print("最高性能26.38534の再現実験完了")
     else:
-        print("\n失敗: TICKET-017最適化版提出失敗")
+        print("\\n失敗: TICKET-017-01+02版提出失敗")
         sys.exit(1)
 
 if __name__ == "__main__":

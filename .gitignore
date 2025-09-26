@@ -228,6 +228,9 @@ experiments/submission_ticket017_regularized_20250926_203334.csv
 experiments/submission_ticket017_optimized_20250926_210000.csv
 data/processed/submission_ticket017_01_02_only_20250926_214914.csv
 
+# TICKET-017 scripts (moved to appropriate directories)
+# Note: Files have been moved to scripts/ and tests/ directories
+
 # Keep important experiment files:
 # experiments/*/config.json (実験設定)
 # experiments/*/results.json (実験メタデータ)

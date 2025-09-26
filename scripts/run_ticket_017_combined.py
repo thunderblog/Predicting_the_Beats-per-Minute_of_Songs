@@ -14,7 +14,7 @@ import lightgbm as lgb
 import time
 
 # プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from src.features import create_comprehensive_interaction_features, create_log_features
 

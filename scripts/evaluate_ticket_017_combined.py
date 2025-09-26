@@ -16,7 +16,7 @@ import lightgbm as lgb
 import time
 
 # プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 def load_sample_data():
     """サンプルデータを読み込む"""

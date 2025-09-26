@@ -11,7 +11,7 @@ import pandas as pd
 from pathlib import Path
 
 # プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 def test_log_features():
     """対数変換特徴量のテスト実行"""
