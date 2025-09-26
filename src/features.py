@@ -35,6 +35,7 @@ from src.features import (
     DurationFeatureCreator,
     AdvancedFeatureCreator,
     LogTransformFeatureCreator,
+    BinningFeatureCreator,
     FeaturePipeline,
     create_feature_pipeline,
     # Processing functions
@@ -249,6 +250,153 @@ def create_log_features(df: pd.DataFrame) -> pd.DataFrame:
 
     n_new_features = len(df_features.columns) - len(df.columns)
     logger.success(f"対数変換特徴量を作成完了: {n_new_features}個の新特徴量を追加")
+
+    return df_features
+
+
+def create_binning_features(df: pd.DataFrame) -> pd.DataFrame:
+    """ビニング・カテゴリ特徴量を作成する (TICKET-017-03)。
+
+    数値特徴量を分位数分割（septile、decile、quintile）でカテゴリ化し、
+    各カテゴリの統計特徴量を生成して非線形関係を捕捉する。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        ビニング特徴量が追加されたデータフレーム
+    """
+    logger.info("ビニング・カテゴリ特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # 対象特徴量（全基本数値特徴量）
+    target_features = [
+        'RhythmScore', 'AudioLoudness', 'VocalContent', 'AcousticQuality',
+        'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore',
+        'TrackDurationMs', 'Energy'
+    ]
+
+    # 存在する特徴量のみ対象とする
+    available_features = [col for col in target_features if col in df.columns]
+
+    logger.info(f"ビニング対象: {len(available_features)}特徴量 - {available_features}")
+
+    # 1. 基本数値特徴量のビニング
+    binning_configs = {
+        'septile': 7,    # 7分位
+        'decile': 10,    # 10分位
+        'quintile': 5,   # 5分位
+    }
+
+    binning_count = 0
+
+    for binning_type, n_bins in binning_configs.items():
+        logger.info(f"{binning_type}分割（{n_bins}分位）を実行中...")
+
+        for feature in available_features:
+            feature_values = df_features[feature]
+
+            # 分位数でビニング（等頻度分割）
+            try:
+                binned_feature_name = f"{feature}_{binning_type}_bin"
+
+                binned_values, _ = pd.qcut(
+                    feature_values,
+                    q=n_bins,
+                    retbins=True,
+                    duplicates='drop',
+                    labels=False  # 数値ラベル使用
+                )
+
+                df_features[binned_feature_name] = binned_values
+                binning_count += 1
+
+            except Exception as e:
+                # 分位数分割が失敗した場合（値の種類が少ない等）
+                logger.warning(f"  {feature}の{binning_type}分割スキップ: {e}")
+                continue
+
+    logger.info(f"基本ビニング完了: {binning_count}特徴量")
+
+    # 2. log変換特徴量のビニング
+    log_features = [col for col in df_features.columns if col.startswith('log1p_')]
+
+    if log_features:
+        logger.info(f"{len(log_features)}個のlog変換特徴量をquintile分割中...")
+
+        log_binning_count = 0
+        for log_feature in log_features:
+            feature_values = df_features[log_feature]
+
+            try:
+                binned_feature_name = f"{log_feature}_quintile_bin"
+
+                binned_values, _ = pd.qcut(
+                    feature_values,
+                    q=5,
+                    retbins=True,
+                    duplicates='drop',
+                    labels=False
+                )
+
+                df_features[binned_feature_name] = binned_values
+                log_binning_count += 1
+
+            except Exception as e:
+                logger.warning(f"  {log_feature}の5分位分割スキップ: {e}")
+                continue
+
+        logger.info(f"log変換ビニング完了: {log_binning_count}特徴量")
+
+    # 3. ビン統計特徴量（BPM目的変数がある場合のみ）
+    if 'BeatsPerMinute' in df_features.columns:
+        logger.info("ビン統計特徴量を作成中...")
+
+        bpm_values = df_features['BeatsPerMinute']
+        binning_features = [col for col in df_features.columns if col.endswith('_bin')]
+        stat_count = 0
+
+        for binning_feature in binning_features:
+            try:
+                bin_values = df_features[binning_feature]
+
+                # 欠損値を含むビンは除外
+                valid_mask = ~(bin_values.isna() | bpm_values.isna())
+                if valid_mask.sum() == 0:
+                    continue
+
+                valid_bins = bin_values[valid_mask]
+                valid_bpm = bpm_values[valid_mask]
+
+                # ビンごとの統計量計算
+                bin_stats = valid_bpm.groupby(valid_bins).agg(['mean', 'std', 'count']).fillna(0)
+
+                # 各サンプルに対応するビン統計量をマップ
+                base_name = binning_feature.replace('_bin', '')
+
+                # 平均BPM特徴量
+                mean_feature_name = f"{base_name}_bin_mean_bpm"
+                df_features[mean_feature_name] = bin_values.map(
+                    dict(zip(bin_stats.index, bin_stats['mean']))
+                ).fillna(valid_bpm.mean())
+                stat_count += 1
+
+                # 標準偏差特徴量
+                std_feature_name = f"{base_name}_bin_std_bpm"
+                df_features[std_feature_name] = bin_values.map(
+                    dict(zip(bin_stats.index, bin_stats['std']))
+                ).fillna(valid_bpm.std())
+                stat_count += 1
+
+            except Exception as e:
+                logger.warning(f"  {binning_feature}の統計特徴量作成スキップ: {e}")
+                continue
+
+        logger.info(f"ビン統計特徴量完了: {stat_count}特徴量")
+
+    n_new_features = len(df_features.columns) - len(df.columns)
+    logger.success(f"ビニング・カテゴリ特徴量を作成完了: {n_new_features}個の新特徴量を追加")
 
     return df_features
 
@@ -1063,6 +1211,7 @@ def main(
     create_advanced: bool = False,
     create_rhythm: bool = False,
     create_log_features: bool = False,
+    create_binning_features: bool = False,
     create_dimensionality_reduction: bool = False,
     apply_pca: bool = True,
     apply_ica: bool = True,
@@ -1092,6 +1241,7 @@ def main(
         create_advanced: 独立性の高い高次特徴量を作成するかどうか
         create_rhythm: ドラマー視点リズム周期性特徴量を作成するかどうか
         create_log_features: 対数変換特徴量を作成するかどうか（TICKET-017-02）
+        create_binning_features: ビニング・カテゴリ特徴量を作成するかどうか（TICKET-017-03）
         create_dimensionality_reduction: PCA・ICA次元削減特徴量を作成するかどうか
         apply_pca: PCA変換を適用するかどうか（次元削減有効時）
         apply_ica: ICA変換を適用するかどうか（次元削減有効時）
@@ -1158,6 +1308,10 @@ def main(
         # 対数変換特徴量の作成（TICKET-017-02）
         if create_log_features:
             enhanced_df = create_log_features(enhanced_df)
+
+        # ビニング・カテゴリ特徴量の作成（TICKET-017-03）
+        if create_binning_features:
+            enhanced_df = create_binning_features(enhanced_df)
 
         # PCA・ICA次元削減特徴量の作成
         if create_dimensionality_reduction:

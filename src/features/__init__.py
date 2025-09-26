@@ -20,11 +20,18 @@ from .genre import MusicGenreFeatureCreator, create_music_genre_features
 from .duration import DurationFeatureCreator, create_duration_features
 from .advanced import AdvancedFeatureCreator, create_advanced_features
 from .log_transform import LogTransformFeatureCreator
+from .binning import BinningFeatureCreator
 
 # Backward compatibility function for log features
 def create_log_features(df):
     """後方互換性のための対数変換特徴量作成関数。"""
     creator = LogTransformFeatureCreator()
+    return creator.create_features(df)
+
+# Backward compatibility function for binning features
+def create_binning_features(df):
+    """後方互換性のためのビニング特徴量作成関数。"""
+    creator = BinningFeatureCreator()
     return creator.create_features(df)
 
 # Feature processing
@@ -50,6 +57,7 @@ __all__ = [
     "DurationFeatureCreator",
     "AdvancedFeatureCreator",
     "LogTransformFeatureCreator",
+    "BinningFeatureCreator",
     # Backward compatibility functions
     "create_interaction_features",
     "create_comprehensive_interaction_features",
@@ -58,6 +66,7 @@ __all__ = [
     "create_duration_features",
     "create_advanced_features",
     "create_log_features",
+    "create_binning_features",
     # Processing functions
     "select_features",
     "scale_features",

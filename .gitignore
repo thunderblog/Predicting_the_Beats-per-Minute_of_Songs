@@ -202,8 +202,10 @@ cython_debug/
 reports/figures/
 
 # Experiment management - exclude large files but keep metadata
-experiments/**/submission*.csv        # 提出ファイル（大容量）
+experiments/submission*.csv            # experiments直下の提出ファイル
+experiments/**/submission*.csv         # experiments配下全ての提出ファイル
 data/processed/submission*.csv         # 提出ファイル（processedディレクトリ）
+**/submission*.csv                     # 全ディレクトリの提出ファイル（大容量）
 submission*.csv                        # ルートディレクトリの提出ファイル
 experiments/**/models/                # モデルファイル（大容量）
 experiments/**/*_cv_results_*.json    # タイムスタンプ付きCV結果（冗長）
@@ -221,10 +223,15 @@ experiments/exp02_multicollinearity_removal/submission.csv
 # テスト・検証用結果ファイル（再生成可能）
 results/*.json
 
+# 個別指定で確実に除外（追加）
+experiments/submission_ticket017_regularized_20250926_203334.csv
+experiments/submission_ticket017_optimized_20250926_210000.csv
+data/processed/submission_ticket017_01_02_only_20250926_214914.csv
+
 # Keep important experiment files:
-# - experiments/*/config.json (実験設定)
-# - experiments/*/results.json (実験メタデータ)
-# - experiments/*/README.md (実験レポート)
-# - experiments/*/submit_commands.txt (提出コマンド)
+# experiments/*/config.json (実験設定)
+# experiments/*/results.json (実験メタデータ)
+# experiments/*/README.md (実験レポート)
+# experiments/*/submit_commands.txt (提出コマンド)
 
 sample_code/*
