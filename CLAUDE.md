@@ -19,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **すべてのレスポンスは日本語で行う**
 - コメントや変数名は英語を使用
 - ログメッセージやユーザー向けメッセージは日本語を推奨
+- **エモジ禁止**: コード内、ファイル名、ログメッセージにはエモジを使用しない（エラーの原因）
 
 ## Common Development Commands
 
@@ -499,62 +500,6 @@ experiments/
 
 ## 精度向上タスクチケット
 
-### 第6段階: 高度な特徴量エンジニアリング
-8. **[TICKET-008] 音楽ジャンル推定特徴量の作成** ✅ **完了**
-   - ファイル: `src/features.py` (機能拡張)
-   - 現状: 実装完了、評価結果でballad_genre_scoreが最重要特徴量に選出
-   - 要件:
-     - Energy×RhythmScore → ダンス系ジャンル特徴量
-     - AcousticQuality×InstrumentalScore → アコースティック系特徴量
-     - VocalContent×MoodScore → バラード系特徴量
-     - 各ジャンル特徴量のBPM予測への寄与度分析
-   - 課題: 多重共線性によりRMSE改善が微小（-0.0010）
-
-   **8.1 [TICKET-008-01] 多重共線性除去による特徴量最適化**
-   - ファイル: `src/features.py` (機能拡張)
-   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
-   - 背景:
-     - ジャンル特徴量と元特徴量の高相関確認（ballad_genre_score vs VocalContent: 0.803）
-     - dance_genre_score vs Energy: 0.871の強い相関
-   - 要件:
-     - 高相関ペア（>0.7）の元特徴量自動除去機能
-     - ジャンル特徴量優先の特徴量選択ロジック
-     - 相関行列による自動検出・除去システム
-     - Before/After性能比較機能
-
-   **8.2 [TICKET-008-02] 独立性の高い高次特徴量の開発**
-   - ファイル: `src/features.py` (新規関数追加)
-   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
-   - 要件:
-     - 比率ベース特徴量（VocalContent/Energy、AcousticQuality/Loudness）
-     - 対数変換時間特徴量（log(TrackDurationMs) × RhythmScore）
-     - 標準化済み交互作用（Z-score正規化後の積）
-     - 音楽理論ベースの複雑指標（テンポ×音響品質の複合指標）
-
-   **8.3 [TICKET-008-03] 次元削減とPCA特徴量の実装**
-   - 新規ファイル: `src/features/dimensionality_reduction.py`
-   - 親チケット: TICKET-008（音楽ジャンル推定特徴量）
-   - 要件:
-     - PCA変換による主成分特徴量作成
-     - ジャンル特徴量群の主成分分析
-     - 元特徴量群の独立成分分析（ICA）
-     - 最適な主成分数の自動選択（分散寄与率）
-
-9. **[TICKET-009] テンポカテゴリ特徴量の実装**
-   - ファイル: `src/features.py` (機能拡張)
-   - 要件:
-     - BPM範囲による楽曲カテゴリ推定（遅・中・速テンポ）
-     - 各特徴量とテンポカテゴリの関係性分析
-     - テンポ予測用の確率的特徴量作成
-
-10. **[TICKET-010] 音楽的複雑性・時間的特徴量の開発**
-    - ファイル: `src/features.py` (機能拡張)
-    - 要件:
-      - RhythmScore/Energy → リズム複雑性指標
-      - TrackDurationMs ベースの長さカテゴリ特徴量
-      - LivePerformanceLikelihood×Energy → パフォーマンス特徴量
-      - 楽曲構造推定特徴量（イントロ・サビ・アウトロ推定）
-
 ### 第7段階: モデル多様化とアンサンブル
 11. **[TICKET-011] アルゴリズム多様化による性能向上**
     - 背景: LightGBMベースラインの限界突破を目指す
@@ -644,66 +589,6 @@ experiments/
       - 結果の自動集約（results.json）
       - 実験比較・可視化ダッシュボード
       - A/Bテスト機能とベンチマーク追跡
-
-### 第11段階: リズム周期性特徴量（高優先度）
-16. **[TICKET-016] ドラマー視点リズム周期性特徴量の実装** 🎵 **高優先度**
-    - ファイル: `src/features.py` (新規関数追加)
-    - 背景: ドラマーの経験知からのBPM予測アプローチ
-    - 音楽的根拠: スネア・キック・ハイハットの周期パターンがBPM決定の核心
-    - 要件:
-      - **リズムパターン推定特徴量**（4/4拍子、3/4拍子、シンコペーション検出）
-      - **周期性一貫性スコア**（TrackDurationとBPM推定の整合性検証）
-      - **疑似ドラム系特徴量**（キック・スネア・ハイハット推定密度）
-      - **拍子・テンポ変動推定**（ルバート、加速、減速パターン検出）
-      - **周期性コヒーレンス指標**（RhythmScore×Energy×時間整合性）
-    - 実装アプローチ:
-      - 既存特徴量の組み合わせで疑似周波数解析
-      - 音楽理論の拍子パターンを数値化
-      - 時間軸整合性検証（楽曲長とBPMの妥当性）
-      - BPMレンジ別典型パターンのマッチング
-    - 期待効果: ドラマー直感に基づく高精度BPM予測、実用的音楽知識の数値化
-
-### 第12段階: Kaggleサンプルコード統合（高優先度）🏆
-17. **[TICKET-017] 包括的特徴量エンジニアリング統合** 🏆 **最高優先度**
-    - ファイル: `src/features.py` (機能大幅拡張)
-    - 背景: Kaggleサンプルコード（RMSE: 26.38）の手法統合による性能向上
-    - ベンチマーク: 現在ベースライン（26.47）から-0.09改善を目標
-    - 期待効果: 系統的特徴量生成による予測精度の根本的向上
-
-    **17.1 [TICKET-017-01] 包括的交互作用特徴量の実装**
-    - 機能: `create_comprehensive_interaction_features()` 関数追加
-    - 要件:
-      - 全数値特徴量ペア（9個）の積特徴量（36個）
-      - 全特徴量の二乗項（9個）
-      - 全ペアの比率特徴量（ゼロ除算対策付き）
-      - itertools.combinationsによる系統的生成
-    - 実装詳細:
-      - 基本特徴量: ['RhythmScore', 'AudioLoudness', 'VocalContent', 'AcousticQuality', 'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore', 'TrackDurationMs', 'Energy']
-      - 命名規則: `{col1}_x_{col2}`, `{col1}_squared`, `{col1}_div_{col2}`
-      - ゼロ除算回避: 分母に1e-6加算
-
-    **17.2 [TICKET-017-02] 対数変換特徴量の実装**
-    - 機能: `create_log_features()` 関数追加
-    - 要件:
-      - 全数値特徴量のlog1p変換（AudioLoudnessを除く8個）
-      - log変換特徴量同士の組み合わせ特徴量
-      - 対数スケールでの正規分布化効果
-    - 実装詳細:
-      - `log1p_{feature_name}` 形式でlog1p変換
-      - 負値対応のためnp.log1p()使用
-      - 分布の歪み補正による予測精度向上
-
-    **17.3 [TICKET-017-03] ビニング・カテゴリ特徴量の実装**
-    - 機能: `create_binning_features()` 関数追加
-    - 要件:
-      - 各数値特徴量の7分位（septile）カテゴリ化
-      - 各数値特徴量の10分位（decile）カテゴリ化
-      - log変換特徴量の5分位（quintile）カテゴリ化
-      - カテゴリ別BPM平均による統計特徴量
-    - 実装詳細:
-      - `pd.cut()`による分位数分割
-      - `groupby().mean()`によるカテゴリ統計特徴量
-      - 離散化による非線形パターン捕捉
 
 18. **[TICKET-018] 高性能アンサンブルシステム実装** 🏆 **最高優先度**
     - 新規ファイル: `src/modeling/ensemble_models.py`
