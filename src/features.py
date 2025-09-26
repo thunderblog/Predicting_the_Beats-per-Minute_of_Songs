@@ -34,6 +34,7 @@ from src.features import (
     MusicGenreFeatureCreator,
     DurationFeatureCreator,
     AdvancedFeatureCreator,
+    LogTransformFeatureCreator,
     FeaturePipeline,
     create_feature_pipeline,
     # Processing functions
@@ -135,6 +136,121 @@ def create_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
     # Use refactored module
     creator = AdvancedFeatureCreator()
     return creator.create_features(df)
+
+
+def create_log_features(df: pd.DataFrame) -> pd.DataFrame:
+    """対数変換特徴量を作成する (TICKET-017-02)。
+
+    全数値特徴量のlog1p変換と、変換特徴量同士の組み合わせ特徴量を生成して
+    分布の歪み補正により予測精度向上を図る。
+
+    Args:
+        df: 元の特徴量を含むデータフレーム
+
+    Returns:
+        対数変換特徴量が追加されたデータフレーム
+    """
+    logger.info("対数変換特徴量を作成中...")
+
+    df_features = df.copy()
+
+    # 対象特徴量（AudioLoudnessを除く8個）
+    target_features = [
+        'RhythmScore', 'VocalContent', 'AcousticQuality',
+        'InstrumentalScore', 'LivePerformanceLikelihood', 'MoodScore',
+        'TrackDurationMs', 'Energy'
+    ]
+
+    # 存在する特徴量のみ対象とする
+    available_features = [col for col in target_features if col in df.columns]
+
+    logger.info(f"対数変換対象: {len(available_features)}特徴量 - {available_features}")
+
+    # 1. 基本log1p変換特徴量の作成
+    log_feature_names = []
+    for feature in available_features:
+        log_feature_name = f"log1p_{feature}"
+
+        # log1p変換（負値対応、1e-8でクリッピング）
+        feature_values = df_features[feature].clip(lower=1e-8)
+        df_features[log_feature_name] = np.log1p(feature_values)
+        log_feature_names.append(log_feature_name)
+
+    logger.info(f"基本log1p変換完了: {len(log_feature_names)}特徴量")
+
+    # 2. log変換特徴量同士の組み合わせ特徴量
+    if len(log_feature_names) >= 2:
+        logger.info("log変換特徴量の組み合わせを作成中...")
+
+        combination_count = 0
+
+        # ペアワイズ積特徴量
+        for i, feature1 in enumerate(log_feature_names):
+            for j, feature2 in enumerate(log_feature_names[i+1:], i+1):
+                # log(A) * log(B) = log(A^B) の近似
+                combo_name = f"{feature1}_x_{feature2}"
+                df_features[combo_name] = df_features[feature1] * df_features[feature2]
+                combination_count += 1
+
+        # 重要な比率特徴量
+        if len(log_feature_names) >= 3:
+            # log(TrackDurationMs)を基準とした比率
+            if 'log1p_TrackDurationMs' in log_feature_names:
+                base_log = 'log1p_TrackDurationMs'
+                for other_log in log_feature_names:
+                    if other_log != base_log:
+                        ratio_name = f"{other_log}_div_{base_log}"
+                        # ゼロ除算回避
+                        df_features[ratio_name] = df_features[other_log] / (df_features[base_log] + 1e-8)
+                        combination_count += 1
+
+            # Energy - RhythmScore log space関係
+            if 'log1p_Energy' in log_feature_names and 'log1p_RhythmScore' in log_feature_names:
+                df_features['log_energy_rhythm_harmony'] = (
+                    df_features['log1p_Energy'] + df_features['log1p_RhythmScore']
+                ) / 2
+                combination_count += 1
+
+        logger.info(f"組み合わせ特徴量完了: {combination_count}特徴量")
+
+    # 3. 対数空間での統計特徴量
+    if len(log_feature_names) >= 2:
+        logger.info("対数空間統計特徴量を作成中...")
+
+        log_values = df_features[log_feature_names]
+
+        # 対数空間での統計量
+        df_features['log_features_mean'] = log_values.mean(axis=1)
+        df_features['log_features_std'] = log_values.std(axis=1)
+        df_features['log_features_range'] = log_values.max(axis=1) - log_values.min(axis=1)
+
+        # 幾何平均（log空間での算術平均の逆変換）
+        df_features['log_features_geometric_mean'] = np.expm1(df_features['log_features_mean'])
+
+        logger.info("対数空間統計特徴量完了: 4特徴量")
+
+    # 4. 分布正規化指標
+    logger.info("分布正規化指標を作成中...")
+
+    # 元特徴量の歪度改善指標
+    skewness_improvements = []
+    for original_feature in available_features:
+        if original_feature in df.columns:
+            original_skew = abs(df[original_feature].skew())
+            log_feature = f"log1p_{original_feature}"
+            if log_feature in df_features.columns:
+                log_skew = abs(df_features[log_feature].skew())
+                improvement = max(0, original_skew - log_skew)  # 改善度（正値のみ）
+                skewness_improvements.append(improvement)
+
+    if skewness_improvements:
+        df_features['log_transformation_benefit'] = np.mean(skewness_improvements)
+        logger.info(f"分布正規化指標完了: 平均改善度 {np.mean(skewness_improvements):.3f}")
+
+    n_new_features = len(df_features.columns) - len(df.columns)
+    logger.success(f"対数変換特徴量を作成完了: {n_new_features}個の新特徴量を追加")
+
+    return df_features
 
 
 def select_features(
@@ -946,6 +1062,7 @@ def main(
     create_genre: bool = True,
     create_advanced: bool = False,
     create_rhythm: bool = False,
+    create_log_features: bool = False,
     create_dimensionality_reduction: bool = False,
     apply_pca: bool = True,
     apply_ica: bool = True,
@@ -974,6 +1091,7 @@ def main(
         create_genre: 音楽ジャンル推定特徴量を作成するかどうか
         create_advanced: 独立性の高い高次特徴量を作成するかどうか
         create_rhythm: ドラマー視点リズム周期性特徴量を作成するかどうか
+        create_log_features: 対数変換特徴量を作成するかどうか（TICKET-017-02）
         create_dimensionality_reduction: PCA・ICA次元削減特徴量を作成するかどうか
         apply_pca: PCA変換を適用するかどうか（次元削減有効時）
         apply_ica: ICA変換を適用するかどうか（次元削減有効時）
@@ -1036,6 +1154,10 @@ def main(
         # ドラマー視点リズム周期性特徴量の作成
         if create_rhythm:
             enhanced_df = create_rhythm_periodicity_features(enhanced_df)
+
+        # 対数変換特徴量の作成（TICKET-017-02）
+        if create_log_features:
+            enhanced_df = create_log_features(enhanced_df)
 
         # PCA・ICA次元削減特徴量の作成
         if create_dimensionality_reduction:

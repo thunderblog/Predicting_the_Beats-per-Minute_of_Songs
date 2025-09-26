@@ -19,6 +19,13 @@ from .statistical import StatisticalFeatureCreator, create_statistical_features
 from .genre import MusicGenreFeatureCreator, create_music_genre_features
 from .duration import DurationFeatureCreator, create_duration_features
 from .advanced import AdvancedFeatureCreator, create_advanced_features
+from .log_transform import LogTransformFeatureCreator
+
+# Backward compatibility function for log features
+def create_log_features(df):
+    """後方互換性のための対数変換特徴量作成関数。"""
+    creator = LogTransformFeatureCreator()
+    return creator.create_features(df)
 
 # Feature processing
 from .selection import select_features
@@ -42,6 +49,7 @@ __all__ = [
     "MusicGenreFeatureCreator",
     "DurationFeatureCreator",
     "AdvancedFeatureCreator",
+    "LogTransformFeatureCreator",
     # Backward compatibility functions
     "create_interaction_features",
     "create_comprehensive_interaction_features",
@@ -49,6 +57,7 @@ __all__ = [
     "create_music_genre_features",
     "create_duration_features",
     "create_advanced_features",
+    "create_log_features",
     # Processing functions
     "select_features",
     "scale_features",
