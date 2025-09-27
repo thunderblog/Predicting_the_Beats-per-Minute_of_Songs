@@ -246,16 +246,16 @@ class EnsembleRegressor:
 
 @app.command()
 def main(
-    train_path: Path = PROCESSED_DATA_DIR / "train_ticket017_combined.csv",
+    train_path: Path = PROCESSED_DATA_DIR / "train_ticket017_75_features.csv",
     test_path: Path = PROCESSED_DATA_DIR / "test.csv",
     output_dir: Path = PROCESSED_DATA_DIR,
     model_dir: Path = MODELS_DIR,
-    exp_name: str = "ticket018_ensemble",
+    exp_name: str = "ticket020_ensemble_75_features",
     n_folds: int = 5,
     n_trials: int = 500,
 ):
     """アンサンブル回帰システムを実行する"""
-    logger.info(f"TICKET-018アンサンブルシステム開始 (実験名: {exp_name})...")
+    logger.info(f"TICKET-020二元アンサンブルシステム開始 (実験名: {exp_name})...")
 
     # ディレクトリ作成
     model_dir.mkdir(exist_ok=True, parents=True)
@@ -302,7 +302,7 @@ def main(
     results["feature_count"] = len(feature_cols)
 
     # 最終ログ
-    logger.success(f"TICKET-018アンサンブルシステム完了")
+    logger.success(f"TICKET-020二元アンサンブルシステム完了")
     logger.info(f"最適重み: {optimal_weights}")
     for model_type, score_info in ensemble.cv_scores.items():
         logger.info(f"{model_type.upper()}: {score_info['mean']:.4f} ± {score_info['std']:.4f}")
