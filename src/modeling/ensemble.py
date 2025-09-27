@@ -5,7 +5,6 @@ import pickle
 from typing import Dict, List, Tuple, Optional
 
 import lightgbm as lgb
-import xgboost as xgb
 import catboost as cb
 import optuna
 from loguru import logger
@@ -27,14 +26,13 @@ app = typer.Typer()
 
 
 class EnsembleRegressor:
-    """3モデル（LightGBM, XGBoost, CatBoost）アンサンブル回帰器"""
+    """2モデル（LightGBM, CatBoost）アンサンブル回帰器"""
 
     def __init__(self, n_folds: int = 5, random_state: int = 42):
         self.n_folds = n_folds
         self.random_state = random_state
         self.models = {
             'lightgbm': [],
-            'xgboost': [],
             'catboost': []
         }
         self.optimal_weights = None
@@ -42,18 +40,17 @@ class EnsembleRegressor:
 
     def train_fold_models(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, List]:
         """全モデルタイプでクロスバリデーション訓練を実行"""
-        logger.info(f"{self.n_folds}フォールドで3モデル訓練を開始...")
+        logger.info(f"{self.n_folds}フォールドで2モデル訓練を開始...")
 
         kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
 
         # Out-of-fold予測格納用
         oof_predictions = {
             'lightgbm': np.zeros(len(X)),
-            'xgboost': np.zeros(len(X)),
             'catboost': np.zeros(len(X))
         }
 
-        fold_scores = {model_type: [] for model_type in ['lightgbm', 'xgboost', 'catboost']}
+        fold_scores = {model_type: [] for model_type in ['lightgbm', 'catboost']}
 
         for fold, (train_idx, val_idx) in enumerate(tqdm(kfold.split(X), total=self.n_folds)):
             logger.info(f"フォールド {fold + 1}/{self.n_folds} 訓練中...")
@@ -61,19 +58,13 @@ class EnsembleRegressor:
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
+            # TODO(human): XGBoost除去による二元アンサンブル実装
             # LightGBM訓練
             lgb_model = self._train_lightgbm_fold(X_train, y_train, X_val, y_val)
             lgb_pred = lgb_model.predict(X_val, num_iteration=lgb_model.best_iteration)
             oof_predictions['lightgbm'][val_idx] = lgb_pred
             fold_scores['lightgbm'].append(np.sqrt(mean_squared_error(y_val, lgb_pred)))
             self.models['lightgbm'].append(lgb_model)
-
-            # XGBoost訓練
-            xgb_model = self._train_xgboost_fold(X_train, y_train, X_val, y_val)
-            xgb_pred = xgb_model.predict(xgb.DMatrix(X_val))
-            oof_predictions['xgboost'][val_idx] = xgb_pred
-            fold_scores['xgboost'].append(np.sqrt(mean_squared_error(y_val, xgb_pred)))
-            self.models['xgboost'].append(xgb_model)
 
             # CatBoost訓練
             cat_model = self._train_catboost_fold(X_train, y_train, X_val, y_val)
@@ -83,10 +74,10 @@ class EnsembleRegressor:
             self.models['catboost'].append(cat_model)
 
             logger.info(f"フォールド {fold + 1} - LGB: {fold_scores['lightgbm'][-1]:.4f}, "
-                       f"XGB: {fold_scores['xgboost'][-1]:.4f}, CAT: {fold_scores['catboost'][-1]:.4f}")
+                       f"CAT: {fold_scores['catboost'][-1]:.4f}")
 
         # CV性能サマリー
-        for model_type in ['lightgbm', 'xgboost', 'catboost']:
+        for model_type in ['lightgbm', 'catboost']:
             mean_score = np.mean(fold_scores[model_type])
             std_score = np.std(fold_scores[model_type])
             self.cv_scores[model_type] = {
@@ -104,23 +95,12 @@ class EnsembleRegressor:
         logger.info(f"Optuna重み最適化開始（{n_trials}トライアル）...")
 
         def objective(trial):
-            # 重み提案（合計=1制約）
+            # 重み提案（二元制約: w_lgb + w_cat = 1）
             w_lgb = trial.suggest_float('weight_lightgbm', 0.0, 1.0)
-            w_xgb = trial.suggest_float('weight_xgboost', 0.0, 1.0)
-            w_cat = trial.suggest_float('weight_catboost', 0.0, 1.0)
-
-            # 正規化
-            total_weight = w_lgb + w_xgb + w_cat
-            if total_weight == 0:
-                return float('inf')
-
-            w_lgb /= total_weight
-            w_xgb /= total_weight
-            w_cat /= total_weight
+            w_cat = 1.0 - w_lgb  # 二元制約により自動計算
 
             # アンサンブル予測
             ensemble_pred = (w_lgb * oof_predictions['lightgbm'] +
-                           w_xgb * oof_predictions['xgboost'] +
                            w_cat * oof_predictions['catboost'])
 
             # RMSE計算
@@ -131,19 +111,21 @@ class EnsembleRegressor:
         study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=self.random_state))
         study.optimize(objective, n_trials=n_trials)
 
-        # 最適重みを正規化
+        # 最適重み設定（二元制約適用）
         best_params = study.best_params
-        total_weight = sum(best_params.values())
-        self.optimal_weights = {k: v/total_weight for k, v in best_params.items()}
+        w_lgb = best_params['weight_lightgbm']
+        w_cat = 1.0 - w_lgb
+        self.optimal_weights = {
+            'weight_lightgbm': w_lgb,
+            'weight_catboost': w_cat
+        }
 
         # 最適アンサンブルCV性能
         ensemble_pred = (self.optimal_weights['weight_lightgbm'] * oof_predictions['lightgbm'] +
-                        self.optimal_weights['weight_xgboost'] * oof_predictions['xgboost'] +
                         self.optimal_weights['weight_catboost'] * oof_predictions['catboost'])
         ensemble_rmse = np.sqrt(mean_squared_error(y_true, ensemble_pred))
 
         logger.success(f"最適重み: LGB={self.optimal_weights['weight_lightgbm']:.3f}, "
-                      f"XGB={self.optimal_weights['weight_xgboost']:.3f}, "
                       f"CAT={self.optimal_weights['weight_catboost']:.3f}")
         logger.success(f"アンサンブルCV RMSE: {ensemble_rmse:.4f}")
 
@@ -156,17 +138,14 @@ class EnsembleRegressor:
 
         logger.info("アンサンブル予測実行中...")
 
-        # 各モデルタイプでフォールド平均予測
+        # 各モデルタイプでフォールド平均予測（二元アンサンブル）
         lgb_preds = np.mean([model.predict(X, num_iteration=model.best_iteration)
                             for model in self.models['lightgbm']], axis=0)
-        xgb_preds = np.mean([model.predict(xgb.DMatrix(X))
-                            for model in self.models['xgboost']], axis=0)
         cat_preds = np.mean([model.predict(X)
                             for model in self.models['catboost']], axis=0)
 
         # 重み付きアンサンブル
         ensemble_pred = (self.optimal_weights['weight_lightgbm'] * lgb_preds +
-                        self.optimal_weights['weight_xgboost'] * xgb_preds +
                         self.optimal_weights['weight_catboost'] * cat_preds)
 
         logger.success("アンサンブル予測完了")
@@ -203,31 +182,6 @@ class EnsembleRegressor:
         )
         return model
 
-    def _train_xgboost_fold(self, X_train: pd.DataFrame, y_train: pd.Series,
-                          X_val: pd.DataFrame, y_val: pd.Series):
-        """XGBoostの単一フォールドを訓練"""
-        dtrain = xgb.DMatrix(X_train, label=y_train)
-        dval = xgb.DMatrix(X_val, label=y_val)
-
-        params = {
-            "objective": "reg:squarederror",
-            "eval_metric": "rmse",
-            "max_depth": 6,
-            "learning_rate": config.learning_rate,
-            "subsample": 0.8,
-            "colsample_bytree": config.feature_fraction,
-            "random_state": config.random_state,
-            "verbosity": 0,
-        }
-
-        model = xgb.train(
-            params, dtrain,
-            num_boost_round=config.n_estimators,
-            evals=[(dtrain, "train"), (dval, "eval")],
-            early_stopping_rounds=config.stopping_rounds,
-            verbose_eval=0,  # ログ出力を抑制
-        )
-        return model
 
     def _train_catboost_fold(self, X_train: pd.DataFrame, y_train: pd.Series,
                            X_val: pd.DataFrame, y_val: pd.Series):
@@ -261,7 +215,7 @@ class EnsembleRegressor:
         # 結果サマリー
         results = {
             "experiment_name": exp_name,
-            "model_type": "ensemble_lgb_xgb_cat",
+            "model_type": "ensemble_lgb_cat",
             "timestamp": timestamp,
             "n_folds": self.n_folds,
             "optimal_weights": self.optimal_weights,
