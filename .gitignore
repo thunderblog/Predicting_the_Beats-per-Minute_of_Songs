@@ -237,4 +237,4 @@ data/processed/submission_ticket017_01_02_only_20250926_214914.csv
 # experiments/*/README.md (実験レポート)
 # experiments/*/submit_commands.txt (提出コマンド)
 
-sample_code/*
+sample_code/*catboost_info/

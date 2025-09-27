@@ -4,16 +4,22 @@ from pathlib import Path
 import pickle
 
 import lightgbm as lgb
+import xgboost as xgb
+import catboost as cb
 from loguru import logger
 import numpy as np
 import pandas as pd
+import sys
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from scripts.my_config import config
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import typer
 
-from src.config import MODELS_DIR, PROCESSED_DATA_DIR
+# パス設定をconfigから取得
+MODELS_DIR = config.models_dir
+PROCESSED_DATA_DIR = config.processed_data_dir
 
 app = typer.Typer()
 
@@ -26,7 +32,7 @@ def main(
     use_cross_validation: bool = True,
     n_folds: int = 5,
     exp_name: str = config.exp_name,
-    model_type: str = "lightgbm",  # New: lightgbm, mlp_standard, mlp_simple
+    model_type: str = "lightgbm",  # New: lightgbm, xgboost, catboost, mlp_standard, mlp_simple
 ):
     """回帰モデルの訓練を実行する。
 
@@ -37,7 +43,7 @@ def main(
         use_cross_validation: クロスバリデーションを使用するかどうか
         n_folds: クロスバリデーションのフォールド数
         exp_name: 実験名（モデル保存時の識別用）
-        model_type: モデルタイプ (lightgbm, mlp_standard, mlp_simple)
+        model_type: モデルタイプ (lightgbm, xgboost, catboost, mlp_standard, mlp_simple)
     """
     logger.info(f"{model_type}回帰モデルの訓練を開始 (実験名: {exp_name})...")
 
@@ -62,13 +68,13 @@ def main(
         logger.success(f"MLP回帰モデルの訓練が完了しました。検証RMSE: {results['cv_rmse']:.4f}")
 
     else:
-        # LightGBM訓練（既存ロジック）
+        # GBDT系モデル訓練（LightGBM, XGBoost, CatBoost）
         if use_cross_validation:
             # クロスバリデーション実行
-            cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds)
+            cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds, model_type=model_type)
 
             # 結果の保存
-            save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols)
+            save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols, model_type)
 
         else:
             # 単一モデル訓練（検証データ使用）
@@ -77,21 +83,22 @@ def main(
             X_val = val_df[feature_cols]
             y_val = val_df[config.target]
 
-            model, train_score, val_score = train_single_model(X_train, y_train, X_val, y_val)
+            model, train_score, val_score = train_single_model(X_train, y_train, X_val, y_val, model_type=model_type)
 
             # モデルと結果の保存
-            save_single_model(model, train_score, val_score, model_dir, exp_name, feature_cols)
+            save_single_model(model, train_score, val_score, model_dir, exp_name, feature_cols, model_type)
 
-        logger.success("LightGBM回帰モデルの訓練が完了しました。")
+        logger.success(f"{model_type}回帰モデルの訓練が完了しました。")
 
 
-def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5):
+def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5, model_type: str = "lightgbm"):
     """クロスバリデーションでモデルを訓練する。
 
     Args:
         X: 特徴量データフレーム
         y: ターゲット変数
         n_folds: フォールド数
+        model_type: モデルタイプ (lightgbm, xgboost, catboost)
 
     Returns:
         cv_scores: 各フォールドのスコア
@@ -109,39 +116,20 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5)
         X_fold_train, X_fold_val = X.iloc[train_idx], X.iloc[val_idx]
         y_fold_train, y_fold_val = y.iloc[train_idx], y.iloc[val_idx]
 
-        # LightGBMデータセット作成
-        train_data = lgb.Dataset(X_fold_train, label=y_fold_train)
-        val_data = lgb.Dataset(X_fold_val, label=y_fold_val, reference=train_data)
+        # モデルタイプ別の訓練
+        if model_type == "lightgbm":
+            model = train_lightgbm_fold(X_fold_train, y_fold_train, X_fold_val, y_fold_val)
+            y_pred = model.predict(X_fold_val, num_iteration=model.best_iteration)
+        elif model_type == "xgboost":
+            model = train_xgboost_fold(X_fold_train, y_fold_train, X_fold_val, y_fold_val)
+            y_pred = model.predict(xgb.DMatrix(X_fold_val))
+        elif model_type == "catboost":
+            model = train_catboost_fold(X_fold_train, y_fold_train, X_fold_val, y_fold_val)
+            y_pred = model.predict(X_fold_val)
+        else:
+            raise ValueError(f"Unsupported model_type: {model_type}")
 
-        # LightGBMパラメータ
-        params = {
-            "objective": config.objective,
-            "metric": config.metric,
-            "boosting_type": "gbdt",
-            "num_leaves": config.num_leaves,
-            "learning_rate": config.learning_rate,
-            "feature_fraction": config.feature_fraction,
-            "bagging_fraction": 0.8,
-            "bagging_freq": 5,
-            "verbose": -1,
-            "random_state": config.random_state,
-        }
-
-        # モデル訓練
-        model = lgb.train(
-            params,
-            train_data,
-            valid_sets=[train_data, val_data],
-            valid_names=["train", "eval"],
-            num_boost_round=config.n_estimators,
-            callbacks=[
-                lgb.early_stopping(config.stopping_rounds),
-                lgb.log_evaluation(config.log_evaluation),
-            ],
-        )
-
-        # 予測とスコア計算
-        y_pred = model.predict(X_fold_val, num_iteration=model.best_iteration)
+        # スコア計算
         fold_rmse = np.sqrt(mean_squared_error(y_fold_val, y_pred))
 
         cv_scores.append(fold_rmse)
@@ -158,24 +146,8 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5)
     return cv_scores, models
 
 
-def train_single_model(
-    X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series
-):
-    """単一モデルを訓練する。
-
-    Args:
-        X_train: 訓練用特徴量
-        y_train: 訓練用ターゲット
-        X_val: 検証用特徴量
-        y_val: 検証用ターゲット
-
-    Returns:
-        model: 訓練済みモデル
-        train_score: 訓練スコア
-        val_score: 検証スコア
-    """
-    logger.info("単一モデルを訓練中...")
-
+def train_lightgbm_fold(X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series):
+    """LightGBMの単一フォールドを訓練する。"""
     # LightGBMデータセット作成
     train_data = lgb.Dataset(X_train, label=y_train)
     val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
@@ -207,10 +179,104 @@ def train_single_model(
         ],
     )
 
-    # スコア計算
-    train_pred = model.predict(X_train, num_iteration=model.best_iteration)
-    val_pred = model.predict(X_val, num_iteration=model.best_iteration)
+    return model
 
+
+def train_xgboost_fold(X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series):
+    """XGBoostの単一フォールドを訓練する。"""
+    # XGBoostデータセット作成
+    dtrain = xgb.DMatrix(X_train, label=y_train)
+    dval = xgb.DMatrix(X_val, label=y_val)
+
+    # XGBoostパラメータ（LightGBMに相当する設定）
+    params = {
+        "objective": "reg:squarederror",
+        "eval_metric": "rmse",
+        "max_depth": 6,  # num_leavesに相当
+        "learning_rate": config.learning_rate,
+        "subsample": 0.8,  # bagging_fraction相当
+        "colsample_bytree": config.feature_fraction,
+        "random_state": config.random_state,
+        "verbosity": 0,
+    }
+
+    # モデル訓練
+    model = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=config.n_estimators,
+        evals=[(dtrain, "train"), (dval, "eval")],
+        early_stopping_rounds=config.stopping_rounds,
+        verbose_eval=config.log_evaluation,
+    )
+
+    return model
+
+
+def train_catboost_fold(X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series):
+    """CatBoostの単一フォールドを訓練する。"""
+    # CatBoostパラメータ（LightGBMに相当する設定）
+    params = {
+        "loss_function": "RMSE",
+        "eval_metric": "RMSE",
+        "depth": 6,  # max_depthに相当
+        "learning_rate": config.learning_rate,
+        "subsample": 0.8,  # bagging_fraction相当
+        "rsm": config.feature_fraction,  # colsample_bylevel相当
+        "random_seed": config.random_state,
+        "verbose": config.log_evaluation,
+        "early_stopping_rounds": config.stopping_rounds,
+        "iterations": config.n_estimators,
+    }
+
+    # モデル訓練
+    model = cb.CatBoostRegressor(**params)
+    model.fit(
+        X_train, y_train,
+        eval_set=(X_val, y_val),
+        verbose=config.log_evaluation,
+        plot=False
+    )
+
+    return model
+
+
+def train_single_model(
+    X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series, model_type: str = "lightgbm"
+):
+    """単一モデルを訓練する。
+
+    Args:
+        X_train: 訓練用特徴量
+        y_train: 訓練用ターゲット
+        X_val: 検証用特徴量
+        y_val: 検証用ターゲット
+        model_type: モデルタイプ (lightgbm, xgboost, catboost)
+
+    Returns:
+        model: 訓練済みモデル
+        train_score: 訓練スコア
+        val_score: 検証スコア
+    """
+    logger.info(f"単一{model_type}モデルを訓練中...")
+
+    # モデルタイプ別の訓練
+    if model_type == "lightgbm":
+        model = train_lightgbm_fold(X_train, y_train, X_val, y_val)
+        train_pred = model.predict(X_train, num_iteration=model.best_iteration)
+        val_pred = model.predict(X_val, num_iteration=model.best_iteration)
+    elif model_type == "xgboost":
+        model = train_xgboost_fold(X_train, y_train, X_val, y_val)
+        train_pred = model.predict(xgb.DMatrix(X_train))
+        val_pred = model.predict(xgb.DMatrix(X_val))
+    elif model_type == "catboost":
+        model = train_catboost_fold(X_train, y_train, X_val, y_val)
+        train_pred = model.predict(X_train)
+        val_pred = model.predict(X_val)
+    else:
+        raise ValueError(f"Unsupported model_type: {model_type}")
+
+    # スコア計算
     train_score = np.sqrt(mean_squared_error(y_train, train_pred))
     val_score = np.sqrt(mean_squared_error(y_val, val_pred))
 
@@ -221,7 +287,7 @@ def train_single_model(
 
 
 def save_cv_results(
-    cv_scores: list, models: list, model_dir: Path, exp_name: str, feature_cols: list
+    cv_scores: list, models: list, model_dir: Path, exp_name: str, feature_cols: list, model_type: str = "lightgbm"
 ):
     """クロスバリデーション結果を保存する。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -229,6 +295,7 @@ def save_cv_results(
     # スコア情報を保存
     results = {
         "experiment_name": exp_name,
+        "model_type": model_type,
         "timestamp": timestamp,
         "cv_scores": cv_scores,
         "mean_cv_score": np.mean(cv_scores),
@@ -263,7 +330,7 @@ def save_cv_results(
 
 
 def save_single_model(
-    model, train_score: float, val_score: float, model_dir: Path, exp_name: str, feature_cols: list
+    model, train_score: float, val_score: float, model_dir: Path, exp_name: str, feature_cols: list, model_type: str = "lightgbm"
 ):
     """単一モデル結果を保存する。"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -271,6 +338,7 @@ def save_single_model(
     # スコア情報を保存
     results = {
         "experiment_name": exp_name,
+        "model_type": model_type,
         "timestamp": timestamp,
         "train_rmse": train_score,
         "val_rmse": val_score,
