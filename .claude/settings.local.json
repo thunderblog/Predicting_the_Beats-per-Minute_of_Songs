@@ -1,18 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del:*)",
-      "Bash(tree:*)",
-      "Bash(for:*)",
-      "Bash(do echo \"=== $exp ===\")",
-      "Bash(done)",
-      "Bash(python:*)",
-      "Bash(cp:*)",
-      "Bash(git add:*)",
-      "Bash(git rm:*)",
       "Bash(git checkout:*)",
-      "Bash(copy \"data\\processed\\submission_ultra_selective_8features.csv\" \"experiments\\exp06_ticket017_01_ultra_selective_8features\"\")"
-    ]
+      "Bash(python:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
   },
   "outputStyle": "Learning"
 }

@@ -238,3 +238,6 @@ data/processed/submission_ticket017_01_02_only_20250926_214914.csv
 # experiments/*/submit_commands.txt (提出コマンド)
 
 sample_code/*catboost_info/
+catboost_info/
+experiments/experiment_results_BOM.csv
+sample_code/
