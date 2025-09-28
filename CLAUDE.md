@@ -208,7 +208,9 @@ data/processed/test_unified_75_features.csv   # テストデータ（67特徴量
 ## 引継ぎ資料作成ルール
 
 ### セッション終了時の必須作業
-- **引継ぎ資料作成**: 毎回セッション終了前に `HANDOVER_YYYYMMDD.md` を作成
+- **引継ぎ資料作成**: 毎回セッション終了前に `docs/handovers/HANDOVER_YYYYMMDD.md` を作成
+- **最新版更新**: `docs/handovers/HANDOVER_latest.md` を最新内容で更新
+- **配置場所**: `docs/handovers/` ディレクトリに日付順で管理
 - **内容**: 実装完了項目、現在の最高性能、次のステップ、技術資産、即座に実行可能コマンド
 - **更新**: CLAUDE.mdの現状サマリーを最新情報に更新
 - **目的**: 次回セッション開始時の効率化、実装継続性確保
