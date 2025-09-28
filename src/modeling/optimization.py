@@ -13,6 +13,7 @@ import optuna
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
+import catboost as cb
 from pathlib import Path
 from sklearn.model_selection import KFold
 from sklearn.feature_selection import SelectKBest, f_regression
@@ -31,6 +32,7 @@ from src.features import (
     create_comprehensive_interaction_features,
     create_log_features
 )
+from src.modeling.cross_validation import create_cv_strategy
 
 
 class OptunaLightGBMOptimizer:
@@ -250,51 +252,225 @@ class OptunaLightGBMOptimizer:
 
         return results
 
-    def train_final_model(self, test_path: str = "data/processed/test.csv") -> Tuple[np.ndarray, Dict[str, Any]]:
-        """最適パラメータで最終モデル訓練と予測"""
+
+class OptunaCatBoostOptimizer:
+    """CatBoost用Optuna最適化器（TICKET-022-03）"""
+
+    def __init__(
+        self,
+        n_trials: int = 100,
+        timeout: Optional[int] = None,
+        cv_folds: int = 5,
+        random_state: int = 42,
+        study_name: str = "catboost_optimization",
+        cv_strategy: str = "bpm_stratified"
+    ):
+        self.n_trials = n_trials
+        self.timeout = timeout
+        self.cv_folds = cv_folds
+        self.random_state = random_state
+        self.study_name = study_name
+        self.cv_strategy = cv_strategy
+
+        self.X_train = None
+        self.y_train = None
+        self.feature_names = None
+        self.best_params = None
+        self.study = None
+
+        # CV設定はcross_validationモジュールから取得
+        self.cv_splitter = None
+
+    def prepare_data(self, data_path: str = "data/processed/train_unified_75_features.csv"):
+        """統一67特徴量データセットの準備"""
+        logger.info(f"CatBoost最適化用データ準備: {data_path}")
+
+        # データ読み込み
+        df = pd.read_csv(data_path)
+        logger.info(f"データ形状: {df.shape}")
+
+        # 特徴量とターゲット分離
+        feature_cols = [col for col in df.columns if col not in ['id', 'BeatsPerMinute']]
+        X = df[feature_cols].values
+        y = df['BeatsPerMinute']
+
+        # CV戦略作成
+        self.cv_splitter = create_cv_strategy(
+            self.cv_strategy,
+            n_splits=self.cv_folds,
+            random_state=self.random_state
+        )
+
+        # データ保存
+        self.X_train = X
+        self.y_train = y
+        self.feature_names = feature_cols
+
+        logger.success(f"データ準備完了: 特徴量数={len(feature_cols)}, サンプル数={len(X)}")
+        return X, y, feature_cols
+
+    def objective(self, trial: optuna.Trial) -> float:
+        """CatBoost用Optuna目的関数"""
+
+        # CatBoost特有の重要パラメータを最適化
+        params = {
+            # 基本パラメータ
+            'loss_function': 'RMSE',
+            'eval_metric': 'RMSE',
+            'random_seed': self.random_state,
+            'verbose': 0,
+            'allow_writing_files': False,
+
+            # 最適化対象パラメータ（CatBoost特有）
+            'depth': trial.suggest_int('depth', 4, 10),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+            'iterations': trial.suggest_int('iterations', 500, 3000),
+            'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 50, 300),
+
+            # CatBoost特有の正則化パラメータ
+            'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1.0, 10.0),
+            'border_count': trial.suggest_int('border_count', 32, 255),
+            'bagging_temperature': trial.suggest_float('bagging_temperature', 0.0, 1.0),
+
+            # サンプリングパラメータ
+            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+            'rsm': trial.suggest_float('rsm', 0.5, 1.0),  # random subspace method
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
+
+            # その他の重要パラメータ
+            'max_ctr_complexity': trial.suggest_int('max_ctr_complexity', 1, 4),
+            'model_size_reg': trial.suggest_float('model_size_reg', 0.0, 10.0),
+        }
+
+        # クロスバリデーション
+        cv_scores = []
+
+        # TODO(human): ここでCatBoostのクロスバリデーション実装
+        # self.cv_splitterを使用してBPM Stratified KFoldでCV実行
+        # 各フォールドでCatBoostRegressor訓練・評価
+        # RMSE計算してcv_scoresに追加
+
+        for fold, (train_idx, val_idx) in enumerate(self.cv_splitter.split(self.X_train, self.y_train)):
+            X_fold_train, X_fold_val = self.X_train[train_idx], self.X_train[val_idx]
+            y_fold_train, y_fold_val = self.y_train.iloc[train_idx], self.y_train.iloc[val_idx]
+
+            try:
+                # CatBoostモデル作成・訓練
+                model = cb.CatBoostRegressor(**params)
+                model.fit(
+                    X_fold_train, y_fold_train,
+                    eval_set=(X_fold_val, y_fold_val),
+                    verbose=0,
+                    plot=False
+                )
+
+                # 予測とスコア計算
+                val_pred = model.predict(X_fold_val)
+                fold_rmse = np.sqrt(mean_squared_error(y_fold_val, val_pred))
+                cv_scores.append(fold_rmse)
+
+            except Exception as e:
+                logger.warning(f"Fold {fold} でエラー: {e}")
+                return float('inf')
+
+        # CV平均スコア
+        mean_cv_score = np.mean(cv_scores)
+
+        # メモリクリーンアップ
+        del model
+        gc.collect()
+
+        return mean_cv_score
+
+    def optimize(self, data_path: str = "data/processed/train_unified_67_features.csv") -> Dict[str, Any]:
+        """CatBoostハイパーパラメータ最適化実行"""
+
+        logger.info("TICKET-022-03 CatBoost最適化開始")
+        logger.info(f"トライアル数: {self.n_trials}, CV戦略: {self.cv_strategy}")
+
+        # データ準備
+        self.prepare_data(data_path)
+
+        # Optuna Study作成
+        self.study = optuna.create_study(
+            direction='minimize',
+            study_name=self.study_name,
+            sampler=optuna.samplers.TPESampler(seed=self.random_state)
+        )
+
+        # 最適化実行
+        start_time = time.time()
+        logger.info("CatBoost最適化実行中...")
+
+        self.study.optimize(
+            self.objective,
+            n_trials=self.n_trials,
+            timeout=self.timeout,
+            show_progress_bar=True
+        )
+
+        optimization_time = time.time() - start_time
+
+        # 最適パラメータ保存
+        self.best_params = self.study.best_params
+
+        # 結果サマリー
+        results = {
+            'best_score': self.study.best_value,
+            'best_params': self.best_params,
+            'n_trials': len(self.study.trials),
+            'optimization_time_sec': optimization_time,
+            'feature_names': self.feature_names,
+            'n_features': len(self.feature_names) if self.feature_names else 0,
+            'cv_strategy': self.cv_strategy
+        }
+
+        logger.success(f"CatBoost最適化完了: Best RMSE = {self.study.best_value:.4f}")
+        logger.info(f"最適化時間: {optimization_time/60:.1f}分")
+
+        return results
+
+    def train_final_model(self, test_path: str = "data/processed/test_unified_75_features.csv") -> Tuple[np.ndarray, Dict[str, Any]]:
+        """最適パラメータでCatBoost最終モデル訓練と予測"""
 
         if self.best_params is None:
-            raise ValueError("最適化を先に実行してください")
+            raise ValueError("CatBoost最適化を先に実行してください")
 
-        logger.info("最終モデル訓練開始")
+        logger.info("CatBoost最終モデル訓練開始")
 
         # テストデータ準備
         test_df = pd.read_csv(test_path)
-        test_features = self.create_ticket_017_01_02_features(test_df)
-
-        # テストデータの特徴量を訓練データと合わせる
-        common_features = [col for col in self.feature_names if col in test_features.columns]
-        X_test = test_features[common_features].values
+        X_test = test_df[self.feature_names].values
 
         logger.info(f"テストデータ形状: {X_test.shape}")
 
-        # 5-Fold CV で最終予測
+        # CV で最終予測
         models = []
         cv_scores = []
         predictions = np.zeros(len(X_test))
 
         final_params = {
-            'objective': 'regression',
-            'metric': 'rmse',
-            'boosting_type': 'gbdt',
-            'verbose': -1,
-            'random_state': self.random_state,
-            'force_col_wise': True,
+            'loss_function': 'RMSE',
+            'eval_metric': 'RMSE',
+            'random_seed': self.random_state,
+            'verbose': 0,
+            'allow_writing_files': False,
             **self.best_params
         }
 
-        for fold, (train_idx, val_idx) in enumerate(self.kfold.split(self.X_train)):
-            logger.info(f"Fold {fold+1}/{self.cv_folds} 訓練中...")
+        for fold, (train_idx, val_idx) in enumerate(self.cv_splitter.split(self.X_train, self.y_train)):
+            logger.info(f"CatBoost Fold {fold+1}/{self.cv_folds} 訓練中...")
 
             X_fold_train, X_fold_val = self.X_train[train_idx], self.X_train[val_idx]
             y_fold_train, y_fold_val = self.y_train.iloc[train_idx], self.y_train.iloc[val_idx]
 
-            # モデル訓練
-            model = lgb.LGBMRegressor(**final_params)
+            # CatBoostモデル訓練
+            model = cb.CatBoostRegressor(**final_params)
             model.fit(
                 X_fold_train, y_fold_train,
-                eval_set=[(X_fold_val, y_fold_val)],
-                callbacks=[lgb.log_evaluation(0)]
+                eval_set=(X_fold_val, y_fold_val),
+                verbose=0,
+                plot=False
             )
 
             # 検証スコア
@@ -307,12 +483,12 @@ class OptunaLightGBMOptimizer:
             predictions += test_pred / self.cv_folds
 
             models.append(model)
-            logger.info(f"  Fold {fold+1} RMSE: {fold_rmse:.4f}")
+            logger.info(f"  CatBoost Fold {fold+1} RMSE: {fold_rmse:.4f}")
 
         final_cv_score = np.mean(cv_scores)
         cv_std = np.std(cv_scores)
 
-        logger.success(f"最終CV RMSE: {final_cv_score:.4f} (±{cv_std:.4f})")
+        logger.success(f"CatBoost最終CV RMSE: {final_cv_score:.4f} (±{cv_std:.4f})")
 
         # 最終結果
         final_results = {
@@ -322,33 +498,111 @@ class OptunaLightGBMOptimizer:
             'best_params': self.best_params,
             'models': models,
             'feature_names': self.feature_names,
-            'n_features': len(self.feature_names)
+            'n_features': len(self.feature_names),
+            'cv_strategy': self.cv_strategy
         }
-
-        # メモリクリーンアップ
-        del test_features
-        gc.collect()
 
         return predictions, final_results
 
-    def save_optimization_results(self, results: Dict[str, Any], save_path: str):
-        """最適化結果の保存"""
 
-        # モデル以外の結果をJSONで保存
-        json_results = {k: v for k, v in results.items() if k != 'models'}
+def run_ticket_022_03_catboost_optimization():
+    """TICKET-022-03 CatBoost単体最適化メイン実行"""
 
-        json_path = Path(save_path).with_suffix('.json')
+    logger.info("=" * 60)
+    logger.info("TICKET-022-03: CatBoost単体最適化実行")
+    logger.info("=" * 60)
+
+    # CatBoost最適化器初期化
+    optimizer = OptunaCatBoostOptimizer(
+        n_trials=50,  # 試行回数
+        timeout=3600,  # 1時間タイムアウト
+        cv_folds=5,
+        cv_strategy="bpm_stratified",  # BPM層化戦略使用
+        study_name="ticket_022_03_catboost_optimization"
+    )
+
+    try:
+        # 最適化実行
+        results = optimizer.optimize("data/processed/train_unified_75_features.csv")
+
+        # 最終モデル訓練と予測
+        predictions, final_results = optimizer.train_final_model("data/processed/test_unified_75_features.csv")
+
+        # 提出ファイル作成
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+        # テストID読み込み
+        test_df_original = pd.read_csv("data/processed/test_unified_75_features.csv")
+        submission_df = pd.DataFrame({
+            'id': test_df_original['id'],
+            'BeatsPerMinute': predictions
+        })
+
+        # 提出ファイル保存
+        submission_path = f"data/processed/submission_ticket022_03_catboost_{timestamp}.csv"
+        submission_df.to_csv(submission_path, index=False)
+
+        # 結果保存
+        results_path = f"experiments/ticket022_03_catboost_results_{timestamp}"
+
+        # JSON結果保存
+        json_results = {k: v for k, v in final_results.items() if k != 'models'}
+        json_path = Path(results_path).with_suffix('.json')
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(json_results, f, ensure_ascii=False, indent=2)
 
-        logger.info(f"最適化結果保存: {json_path}")
+        # モデル保存
+        model_path = Path(results_path).with_suffix('.pkl')
+        with open(model_path, 'wb') as f:
+            pickle.dump(final_results['models'], f)
 
-        # モデルはPickleで別途保存
-        if 'models' in results:
-            model_path = Path(save_path).with_suffix('.pkl')
-            with open(model_path, 'wb') as f:
-                pickle.dump(results['models'], f)
-            logger.info(f"モデル保存: {model_path}")
+        # サマリー表示
+        logger.info("\n" + "=" * 60)
+        logger.info("TICKET-022-03 CatBoost最適化完了")
+        logger.info("=" * 60)
+        logger.info(f"最高CV RMSE: {final_results['cv_score']:.4f} (±{final_results['cv_std']:.4f})")
+        logger.info(f"特徴量数: {final_results['n_features']}")
+        logger.info(f"CV戦略: {final_results['cv_strategy']}")
+        logger.info(f"最適パラメータ数: {len(final_results['best_params'])}")
+        logger.info(f"提出ファイル: {submission_path}")
+        logger.info(f"結果ファイル: {json_path}")
+
+        # 最適パラメータ表示
+        logger.info("\nCatBoost最適ハイパーパラメータ:")
+        for param, value in final_results['best_params'].items():
+            logger.info(f"  {param}: {value}")
+
+        # 提出コマンド表示
+        logger.info(f"\n提出コマンド:")
+        cv_score = final_results['cv_score']
+        logger.info(f'kaggle competitions submit -c playground-series-s5e9 -f "{submission_path}" -m "TICKET-022-03 CatBoost Optimized (CV: {cv_score:.4f}, Features: 67, Stratified)"')
+
+        return True
+
+    except Exception as e:
+        logger.error(f"TICKET-022-03 CatBoost最適化エラー: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "catboost":
+        # CatBoost最適化実行
+        success = run_ticket_022_03_catboost_optimization()
+        if success:
+            logger.success("TICKET-022-03 CatBoost最適化成功")
+        else:
+            logger.error("TICKET-022-03 CatBoost最適化失敗")
+            sys.exit(1)
+    else:
+        # デフォルトはLightGBM最適化実行
+        success = run_ticket_013_optimization()
+        if success:
+            logger.success("TICKET-013 Optuna最適化成功")
+        else:
+            logger.error("TICKET-013 Optuna最適化失敗")
+            sys.exit(1)
 
 
 def run_ticket_013_optimization():
