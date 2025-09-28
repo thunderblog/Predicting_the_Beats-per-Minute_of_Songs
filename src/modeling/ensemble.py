@@ -17,6 +17,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import typer
+from .cross_validation import create_cv_strategy
 
 # パス設定をconfigから取得
 MODELS_DIR = config.models_dir
@@ -28,9 +29,10 @@ app = typer.Typer()
 class EnsembleRegressor:
     """2モデル（LightGBM, CatBoost）アンサンブル回帰器"""
 
-    def __init__(self, n_folds: int = 5, random_state: int = 42):
+    def __init__(self, n_folds: int = 5, random_state: int = 42, cv_strategy: str = "standard_kfold"):
         self.n_folds = n_folds
         self.random_state = random_state
+        self.cv_strategy = cv_strategy
         self.models = {
             'lightgbm': [],
             'catboost': []
@@ -40,9 +42,10 @@ class EnsembleRegressor:
 
     def train_fold_models(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, List]:
         """全モデルタイプでクロスバリデーション訓練を実行"""
-        logger.info(f"{self.n_folds}フォールドで2モデル訓練を開始...")
+        logger.info(f"{self.n_folds}フォールドで2モデル訓練を開始 (CV戦略: {self.cv_strategy})...")
 
-        kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
+        # CV戦略の作成
+        cv_splitter = create_cv_strategy(self.cv_strategy, n_splits=self.n_folds, random_state=self.random_state)
 
         # Out-of-fold予測格納用
         oof_predictions = {
@@ -52,13 +55,12 @@ class EnsembleRegressor:
 
         fold_scores = {model_type: [] for model_type in ['lightgbm', 'catboost']}
 
-        for fold, (train_idx, val_idx) in enumerate(tqdm(kfold.split(X), total=self.n_folds)):
+        for fold, (train_idx, val_idx) in enumerate(tqdm(cv_splitter.split(X, y), total=self.n_folds)):
             logger.info(f"フォールド {fold + 1}/{self.n_folds} 訓練中...")
 
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
-            # TODO(human): XGBoost除去による二元アンサンブル実装
             # LightGBM訓練
             lgb_model = self._train_lightgbm_fold(X_train, y_train, X_val, y_val)
             lgb_pred = lgb_model.predict(X_val, num_iteration=lgb_model.best_iteration)

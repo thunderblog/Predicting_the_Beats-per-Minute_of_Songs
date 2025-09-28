@@ -16,6 +16,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import typer
+from src.modeling.cross_validation import create_cv_strategy
 
 # パス設定をconfigから取得
 MODELS_DIR = config.models_dir
@@ -33,6 +34,7 @@ def main(
     n_folds: int = 5,
     exp_name: str = config.exp_name,
     model_type: str = "lightgbm",  # New: lightgbm, xgboost, catboost, mlp_standard, mlp_simple
+    cv_strategy: str = "standard_kfold",  # New: standard_kfold, bpm_stratified, music_similarity_group
 ):
     """回帰モデルの訓練を実行する。
 
@@ -44,6 +46,7 @@ def main(
         n_folds: クロスバリデーションのフォールド数
         exp_name: 実験名（モデル保存時の識別用）
         model_type: モデルタイプ (lightgbm, xgboost, catboost, mlp_standard, mlp_simple)
+        cv_strategy: CV戦略 (standard_kfold, bpm_stratified, music_similarity_group)
     """
     logger.info(f"{model_type}回帰モデルの訓練を開始 (実験名: {exp_name})...")
 
@@ -71,7 +74,7 @@ def main(
         # GBDT系モデル訓練（LightGBM, XGBoost, CatBoost）
         if use_cross_validation:
             # クロスバリデーション実行
-            cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds, model_type=model_type)
+            cv_scores, models = train_with_cross_validation(X_train, y_train, n_folds=n_folds, model_type=model_type, cv_strategy=cv_strategy)
 
             # 結果の保存
             save_cv_results(cv_scores, models, model_dir, exp_name, feature_cols, model_type)
@@ -91,7 +94,7 @@ def main(
         logger.success(f"{model_type}回帰モデルの訓練が完了しました。")
 
 
-def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5, model_type: str = "lightgbm"):
+def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5, model_type: str = "lightgbm", cv_strategy: str = "standard_kfold"):
     """クロスバリデーションでモデルを訓練する。
 
     Args:
@@ -99,18 +102,20 @@ def train_with_cross_validation(X: pd.DataFrame, y: pd.Series, n_folds: int = 5,
         y: ターゲット変数
         n_folds: フォールド数
         model_type: モデルタイプ (lightgbm, xgboost, catboost)
+        cv_strategy: CV戦略 (standard_kfold, bpm_stratified, music_similarity_group)
 
     Returns:
         cv_scores: 各フォールドのスコア
         models: 訓練済みモデルのリスト
     """
-    logger.info(f"{n_folds}フォールドクロスバリデーションを実行中...")
+    logger.info(f"{n_folds}フォールドクロスバリデーションを実行中 (戦略: {cv_strategy})...")
 
-    kfold = KFold(n_splits=n_folds, shuffle=True, random_state=config.random_state)
+    # CV戦略の作成
+    cv_splitter = create_cv_strategy(cv_strategy, n_splits=n_folds, random_state=config.random_state)
     cv_scores = []
     models = []
 
-    for fold, (train_idx, val_idx) in enumerate(tqdm(kfold.split(X), total=n_folds)):
+    for fold, (train_idx, val_idx) in enumerate(tqdm(cv_splitter.split(X, y), total=n_folds)):
         logger.info(f"フォールド {fold + 1}/{n_folds} を訓練中...")
 
         X_fold_train, X_fold_val = X.iloc[train_idx], X.iloc[val_idx]
