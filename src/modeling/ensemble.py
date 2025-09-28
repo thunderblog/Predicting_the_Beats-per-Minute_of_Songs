@@ -155,19 +155,22 @@ class EnsembleRegressor:
 
     def _train_lightgbm_fold(self, X_train: pd.DataFrame, y_train: pd.Series,
                            X_val: pd.DataFrame, y_val: pd.Series):
-        """LightGBMの単一フォールドを訓練"""
+        """LightGBMの単一フォールドを訓練（TICKET-021正則化設定統合）"""
         train_data = lgb.Dataset(X_train, label=y_train)
         val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
 
+        # TICKET-021: exp09_1最高LB性能(26.38534)の正則化設定統合
         params = {
             "objective": config.objective,
             "metric": config.metric,
             "boosting_type": "gbdt",
-            "num_leaves": config.num_leaves,
-            "learning_rate": config.learning_rate,
-            "feature_fraction": config.feature_fraction,
-            "bagging_fraction": 0.8,
+            "num_leaves": 20,  # exp09_1設定
+            "learning_rate": 0.03,  # exp09_1設定
+            "feature_fraction": 0.7,  # exp09_1正則化設定
+            "bagging_fraction": 0.7,  # exp09_1正則化設定
             "bagging_freq": 5,
+            "reg_alpha": 2.0,  # exp09_1 L1正則化
+            "reg_lambda": 2.0,  # exp09_1 L2正則化
             "verbose": -1,
             "random_state": config.random_state,
         }
@@ -187,18 +190,26 @@ class EnsembleRegressor:
 
     def _train_catboost_fold(self, X_train: pd.DataFrame, y_train: pd.Series,
                            X_val: pd.DataFrame, y_val: pd.Series):
-        """CatBoostの単一フォールドを訓練"""
+        """CatBoostの単一フォールドを訓練（TICKET-022-03最適化パラメータ統合）"""
+        # TICKET-021: 最適化CatBoostパラメータ統合（CV 26.464±0.007達成）
         params = {
             "loss_function": "RMSE",
             "eval_metric": "RMSE",
-            "depth": 6,
-            "learning_rate": config.learning_rate,
-            "subsample": 0.8,
-            "rsm": config.feature_fraction,
+            "depth": 6,  # 最適化結果
+            "learning_rate": 0.0302,  # 最適化結果
+            "iterations": 2324,  # 最適化結果
+            "early_stopping_rounds": 210,  # 最適化結果
+            "l2_leaf_reg": 8.985,  # 最適化結果（強い正則化）
+            "border_count": 137,  # CatBoost特有最適化
+            "bagging_temperature": 0.120,  # 最適化結果
+            "subsample": 0.885,  # 最適化結果
+            "rsm": 0.880,  # 最適化結果
+            "min_data_in_leaf": 57,  # 最適化結果
+            "max_ctr_complexity": 4,  # 最適化結果
+            "model_size_reg": 4.938,  # 最適化結果
             "random_seed": config.random_state,
             "verbose": 0,  # ログ出力を抑制
-            "early_stopping_rounds": config.stopping_rounds,
-            "iterations": config.n_estimators,
+            "allow_writing_files": False,
         }
 
         model = cb.CatBoostRegressor(**params)
