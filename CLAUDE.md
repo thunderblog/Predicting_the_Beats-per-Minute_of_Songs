@@ -172,6 +172,39 @@ result = pipeline.execute(df)
 result = pipeline.execute(df, creators_to_run=["BasicInteraction"])
 ```
 
+#### **統一特徴量生成システム（TICKET-016実装）**
+
+trainとtestデータで完全に同一の特徴量セットを生成する標準化手順：
+
+```python
+# 統一特徴量生成の実行
+python scripts/unified_feature_generation.py
+
+# 出力ファイル確認
+data/processed/train_unified_75_features.csv  # 訓練データ（67特徴量）
+data/processed/test_unified_75_features.csv   # テストデータ（67特徴量）
+```
+
+**特徴量構成（67特徴量）**:
+1. **基本特徴量（9個）**: 元データの全特徴量
+2. **交互作用特徴量（22個）**:
+   - 乗算交互作用（RhythmScore², AudioLoudness×VocalContent等）
+   - 除算交互作用（除零対策: +1e-8）
+3. **対数変換特徴量（36個）**:
+   - 基本対数変換（log1p）
+   - 対数特徴量間の交互作用・除算
+   - 対数特徴量統計量（平均・標準偏差・範囲・幾何平均）
+
+**使用上の注意**:
+- 特徴量参照順序: 対数特徴量作成前に元特徴量の存在確認必須
+- 特徴量一致検証: 生成後にtrain/test間での完全一致を確認
+- 命名規則: `{feat1}_x_{feat2}` (交互作用), `{feat1}_div_{feat2}` (除算), `log1p_{feat}` (対数)
+
+**性能実績**:
+- CV性能: 26.463984 ± 0.006159 (BPM Stratified KFold)
+- LB性能: 26.38823 (40特徴量版から-0.0003改善)
+- 安定性: 高い再現性とCV-LB一貫性を確保
+
 ## コーディング規則とベストプラクティス
 
 ### PEP 8準拠
