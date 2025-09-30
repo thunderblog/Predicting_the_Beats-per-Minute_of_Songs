@@ -361,6 +361,7 @@ def main():
     logger.info(f"LightGBM重み: {best_params['ensemble_weights']['weight_lightgbm']:.3f}")
     logger.info(f"CatBoost重み: {1.0 - best_params['ensemble_weights']['weight_lightgbm']:.3f}")
 
+    # TODO(human): 最適化完了後のKaggle提出ファイル生成機能を追加
     logger.info("次のステップ: 最適化済みパラメータでのKaggle提出実行")
 
     return best_params, best_score
