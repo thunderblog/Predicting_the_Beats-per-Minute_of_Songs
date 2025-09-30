@@ -8,7 +8,8 @@
       "Bash(git push:*)",
       "Bash(dir:*)",
       "Bash(kaggle competitions submit:*)",
-      "Bash(kaggle competitions submissions:*)"
+      "Bash(kaggle competitions submissions:*)",
+      "Bash(copy:*)"
     ],
     "deny": [],
     "ask": []
