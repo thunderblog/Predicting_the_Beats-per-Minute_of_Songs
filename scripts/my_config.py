@@ -30,6 +30,7 @@ class CFG:
     models_dir = project_root / "models"
     reports_dir = project_root / "reports"
     figures_dir = reports_dir / "figures"
+    experiments_dir = project_root / "experiments"
     
     # 実験設定
     exp_name = 'exp01'
