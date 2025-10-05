@@ -247,3 +247,6 @@ docs/docs/rules.txt
 # Exclude documentation directories (not needed in version control)
 docs/reference_notebooks/
 docs/handovers/
+
+# Blog post draft (personal content, not for version control)
+docs/blog_post.md
