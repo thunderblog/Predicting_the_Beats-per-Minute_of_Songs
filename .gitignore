@@ -243,3 +243,7 @@ experiments/experiment_results_BOM.csv
 sample_code/
 
 docs/docs/rules.txt
+
+# Exclude documentation directories (not needed in version control)
+docs/reference_notebooks/
+docs/handovers/
