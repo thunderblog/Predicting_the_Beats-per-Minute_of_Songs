@@ -241,3 +241,5 @@ sample_code/*catboost_info/
 catboost_info/
 experiments/experiment_results_BOM.csv
 sample_code/
+
+docs/docs/rules.txt
